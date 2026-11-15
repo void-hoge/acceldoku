@@ -35,6 +35,11 @@ ctest --preset host -L '^async_queue$'
 `-DXVLOG_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/xvlog` で明示指定できる。
 問題集は `-DFADES_DATASET=/absolute/path/to/dataset.txt` で変更可能。
 
+GitHub Actions の Host tests は push、pull request、手動実行時に Ubuntu 上で
+6コア構成の `host` プリセットをビルドし、登録された全試験を実行する。
+Vivado がないため XPM 試験は登録されない。KV260 実機を使う
+`host/tests/` の試験は [host/README.md](../host/README.md) の手順で実行する。
+
 ## 試験一覧
 
 | ディレクトリ／ラベル | 試験名 | 検証対象・目的 |
