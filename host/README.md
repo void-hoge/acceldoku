@@ -6,14 +6,14 @@
 - バッファ数はそれぞれユーザー指定
 - 1 バッファは 1MiB/16384問
 - バッファ数を増やしても、全体の物理連続領域を要求しない
-- ユーザーは try_dequeue() 的な API で空いた入力バッファ、または完了した出力バッファを借用
+- ユーザーは `try_dequeue_*()` で空いた入力バッファ、または完了した出力バッファの番号を借用
   - 借りられるものがなければ、待たずに空を返す
-  - バッファオブジェクトをユーザーが破棄すると RAII で自動 enqueue
+  - 使用後は明示的に enqueue または TX の借用を解除
 - HW は、そのバッファがフルになった場合、または登録済みの全ての問題が終わったらそのバッファを返す
 - 空きの RX がなくなると背圧が伝播し、最終的に空き TX もなくなる
   - RX の返却で再開
 - TX と RX のいずれかを待つ、TX のみを待つ、RX のみを待つ API が必要
-  - すでに dequeue 可能ならば即座に戻る
+  - `poll` の完了通知を待ち、初期CPU所有 TX は待機前に取得する
 - Puzzle = std::array<uint8_t, 64>? 多分 ID と 81 セル？
   - HW が扱う入力と出力の形式が揃ってるか確認
   - 揃ってなければ HW 側を揃えて (多分 valid フラグみたいなのが出力側にはあるはず)
@@ -45,11 +45,57 @@
 - HW versionは `0x46414404`。旧HWとは入力セルの位置が異なる。
 - ドライバーとABIは `driver/src/fades.c` / `driver/include/fades_ioctl.h` に残している。
 
+## C++ ストリーミング API
+
+`host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v8 を使う。
+`try_dequeue_tx()` / `try_dequeue_rx()` は各方向のバッファー番号を返し、空なら `std::nullopt` を返す。
+`encode(id, puzzle)` は81セルを64バイトの `PuzzleRecord` に変換する。
+`record_id()`、`record_status()`、`decode_cells()` で出力を解釈できる。
+`write_tx(index, span)` は先頭から上書きする。`first_id` を追加するとコピー時にIDを連番で置き換える。
+`enqueue_tx(index)` は最後に正常終了した書き込みの 1..16384 件を投入する。
+書き込み前または最後の書き込みが空の場合は投入せず例外を送出する。
+送信しない TX は `release_tx(index)`、RX は `enqueue_rx(index)` で明示的に返却する。
+RX の件数は `rx_size(index)`、内容は `read_rx(index, destination)` で取得する。
+範囲外や借用中でない番号の操作は例外となる。投入失敗時は借用を保持し、その場で例外を送出する。
+各番号は対応する方向で借用中にのみ利用できる。同じ番号の同時使用や返却後の利用は呼び出し側で防ぐ。
+再貸出後の番号は以前の借用と区別されない。明示返却しないバッファーは借用中のままになる。
+TX と RX はそれぞれ一つのスレッドが扱える。デバイスの開始・停止・破棄は
+バッファー操作と同期する。開始・停止はバッファーを借用中でも可能で、
+借用中の TX は再貸出せず、借用中の RX は返却されるまで再投入しない。
+`stream_on()` は借用されていない RX を投入する。
+`stream_off()` は転送中・待機中のデータを破棄するが、借用中の RX データは保持する。
+停止後は全待機スレッドの終了を確認してから再開する。
+`wait()` は `poll` による完了待ちで、初期CPU所有のTXは通知されない。
+開始時は初期TXを `try_dequeue_tx()` で取得・投入してから `wait()` する。
+未投入で返された空きTXもpollでは通知されず、次の待機前に再取得する。
+`wait(WaitFor::tx | WaitFor::rx)` で両方向を待てる。
+
+```cpp
+if (auto tx = device.try_dequeue_tx()) {
+    device.write_tx(*tx, puzzles, first_id);
+    device.enqueue_tx(*tx);
+}
+if (auto rx = device.try_dequeue_rx()) {
+    received += device.rx_size(*rx); // 内容を読むなら read_rx() を使う
+    device.enqueue_rx(*rx);
+}
+```
+
+```sh
+cmake -S . -B build/cpp -DFADES_BUILD_CPP=ON
+cmake --build build/cpp --target fades_benchmark
+build/cpp/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+```
+
+入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
+ベンチマークは計測前に変換して初期 TX を投入し、その後は入力を反復コピーし ID を更新する。
+結果は件数のみ数え、計測には開始・継続コピー、投入・回収、求解と最終排出を含む。
+
 ## 現行C I/F：ABI v8
 
 `driver/include/fades_ioctl.h` をincludeし、`/dev/fades` のioctl / mmap / pollを使う。
-上記のRAIIや `try_dequeue()` は高水準ライブラリーの要求であり、現在のC ABIでは
-明示的に `QBUF` / `DQBUF` を行う。統計は `fades_solver_stats` の名前付きフィールドで取得する。
+現在のC ABIでは明示的に `QBUF` / `DQBUF` を行う。
+統計は `fades_solver_stats` の名前付きフィールドで取得する。
 
 ### 設定と個別mmap
 
