@@ -77,7 +77,10 @@ firmwareを配置し、`xmutil loadapp fades` と `insmod fades.ko` を実行す
 
 ## 3. 開発・検証する
 
+CPU参照に fastdoku を使用するため、Rust / Cargo と submodule の取得が必要。
+
 ```sh
+git submodule update --init --recursive
 cmake --preset host -DFADES_CORES=6
 cmake --build --preset host
 ctest --preset host                         # CPU参照・RTLの全試験
@@ -163,7 +166,7 @@ ctest --test-dir build/host-1core --output-on-failure -L '^fades$'
 | PLの入口 | `rtl/fades_axi.sv` → `fades.sv` | 制御 → 供給・ID管理・結果回収・コア群 |
 | 探索 | `rtl/fades_core.sv` → `deduction_engine.sv` / `branch_generator.sv` | 状態列・探索 → 推論 / 分岐 |
 | クロック境界 | `rtl/async_queue.sv` | XPM非同期FIFOと試験用モデル |
-| CPU照合 | `reference/sudoku.hpp` | RTL試験用の独立参照ソルバー |
+| CPU照合 | `reference/sudoku.hpp`、`reference/fastdoku/` | RTL試験用の fastdoku 参照ソルバーと形式変換 |
 
 `build/` はビルド生成物。
 

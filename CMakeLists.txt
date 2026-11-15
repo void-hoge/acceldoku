@@ -17,6 +17,31 @@ include(CTest)
 
 add_library(sudoku_reference INTERFACE)
 target_include_directories(sudoku_reference INTERFACE "${PROJECT_SOURCE_DIR}/reference")
+if(FADES_BUILD_SIM)
+    find_program(CARGO_EXECUTABLE cargo REQUIRED)
+    find_package(Threads REQUIRED)
+    set(fastdoku_manifest "${PROJECT_SOURCE_DIR}/reference/fastdoku-ffi/Cargo.toml")
+    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/reference/fastdoku/Cargo.toml")
+        message(FATAL_ERROR "fastdoku is missing: run git submodule update --init --recursive")
+    endif()
+    file(GLOB_RECURSE fastdoku_sources CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/reference/fastdoku/src/*.rs"
+        "${PROJECT_SOURCE_DIR}/reference/fastdoku-ffi/src/*.rs")
+    set(fastdoku_archive "${PROJECT_BINARY_DIR}/fastdoku/release/libfades_fastdoku_ffi.a")
+    add_custom_command(OUTPUT "${fastdoku_archive}"
+        COMMAND "${CARGO_EXECUTABLE}" build --release --locked
+            --manifest-path "${fastdoku_manifest}" --target-dir "${PROJECT_BINARY_DIR}/fastdoku"
+        DEPENDS ${fastdoku_sources} "${fastdoku_manifest}"
+            "${PROJECT_SOURCE_DIR}/reference/fastdoku-ffi/Cargo.lock"
+            "${PROJECT_SOURCE_DIR}/reference/fastdoku/Cargo.toml"
+            "${PROJECT_SOURCE_DIR}/reference/fastdoku/build.rs"
+        VERBATIM)
+    add_custom_target(fastdoku_build DEPENDS "${fastdoku_archive}")
+    add_library(fastdoku_ffi STATIC IMPORTED GLOBAL)
+    set_target_properties(fastdoku_ffi PROPERTIES IMPORTED_LOCATION "${fastdoku_archive}")
+    add_dependencies(fastdoku_ffi fastdoku_build)
+    target_link_libraries(sudoku_reference INTERFACE fastdoku_ffi Threads::Threads ${CMAKE_DL_LIBS} m)
+endif()
 set(FADES_CORE_RTL
     "${PROJECT_SOURCE_DIR}/rtl/deduction_engine.sv"
     "${PROJECT_SOURCE_DIR}/rtl/branch_generator.sv"
