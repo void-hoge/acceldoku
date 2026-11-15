@@ -111,7 +111,9 @@ cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-通常のbuildで `build/kv260-ps/host/driver/src/fades.ko` とCツール `build/kv260-ps/host/tools/fades_run` を生成する。
+通常のbuildで `build/kv260-ps/host/driver/src/fades.ko`、Cツール
+`build/kv260-ps/host/tools/fades_run` と、C++ライブラリー・ベンチマーク
+`build/kv260-ps/host/tools/cpp/fades_benchmark` を生成する。
 モジュールは実行中カーネルに対応したヘッダーでビルドする。Vivado・RTL検証ツールは不要。
 ヘッダーを明示する場合はconfigure時に `-DFADES_KERNEL_BUILD=/path/to/headers` を指定する。
 
@@ -131,13 +133,14 @@ xmutil listapps
 insmod build/kv260-ps/host/driver/src/fades.ko
 ls -l /dev/fades
 python3 host/tests/check_abi.py
+python3 host/tests/check_poll_stop.py
 python3 host/tests/check_stream.py
 ```
 
 `xmutil` の終了値に加え、listapps、デバイスの存在、機能試験でロードを確認する。
 デバイスが出ない場合や転送異常時は root で `dmesg` を確認する。
 転送中断・タイムアウト時は、プロセスを終了してモジュールと FPGA アプリを再ロードする。
-ABI v6 は面数設定・個別mmap後、STREAMONで容量16,384問を設定して初期化し、継続処理する。
+ABI v8 は面数設定・個別mmap後、STREAMONで容量16,384問を設定して初期化し、継続処理する。
 出力は N 件または登録済みの処理がすべて完了した端数で区切る。
 通常の DMA packet の TLAST でキューやコアをリセットしない。
 STREAMOFF で両 DMA と全 solver/FIFO を reset してから再開始できる。

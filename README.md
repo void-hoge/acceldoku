@@ -13,12 +13,22 @@ PS の Linux プログラムから DDR / AXI DMA 経由で問題を投入し、I
 
 ## 1. ホスト側
 
-ホストC++実装は削除した。要求仕様と、verify／streamが確認していたことは
-[host/README.md](host/README.md) にまとめている。
-Linuxドライバー・ioctl ABI・Pythonによる実機試験は `host/` にある。
-現行C I/Fは **ABI v6**。TX/RX面数を独立に指定し、1 MiB単位で個別mmapする。
-設定・mmap・投入回収の使用例は [host/README.md](host/README.md#現行c-ifabi-v6)、
-実行可能なCツールは `host/tools/fades_run.c`。
+Linux カーネルドライバー、C ioctl ABI、C++20 ライブラリーと実機試験は `host/` にある。
+現行 ABI は **v8**。TX/RX バッファー数を独立に指定し、1面 1 MiB の領域を個別に mmap する。
+`fades::StreamDevice` はバッファー番号を借用し、明示的に投入・返却する C++ API。
+入出力形式、API、所有権と使用例は [host/README.md](host/README.md) を参照。
+
+| 対象 | ソース | 用途 |
+| --- | --- | --- |
+| C ioctl ABI / ドライバー | `host/driver/include/fades_ioctl.h`、`host/driver/src/fades.c` | `/dev/fades` の DMA・バッファー・制御 |
+| C++ ライブラリー | `host/lib/include/fades/stream_device.hpp`、`host/lib/src/stream_device.cpp` | レコード変換とストリーミング操作 |
+| C / C++ ベンチマーク | `host/tools/fades_run.c`、`host/tools/cpp/benchmark.cpp` | 入力を反復投入し、結果を件数のみ集計 |
+
+C++ ベンチマークは 1 行 81 文字の問題テキストを入力する。デバイスの準備後、KV260 で実行する。
+
+```sh
+build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+```
 
 ## 2. 実機を準備する
 
@@ -57,7 +67,9 @@ cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-通常のbuildで `build/kv260-ps/host/driver/src/fades.ko` とCツール `build/kv260-ps/host/tools/fades_run` を生成する。
+通常のbuildで `build/kv260-ps/host/driver/src/fades.ko`、Cツール
+`build/kv260-ps/host/tools/fades_run`、C++ライブラリーと
+`build/kv260-ps/host/tools/cpp/fades_benchmark` を生成する。
 実機自身のコンパイラーと実行中カーネルのヘッダーを使う。
 firmwareを配置し、`xmutil loadapp fades` と `insmod fades.ko` を実行すると **`/dev/fades`** が使える。
 転送・Arm64 ビルド・ロードの手順と、各ボード用ファイルの役割は
@@ -103,12 +115,15 @@ XPM試験にはVivadoが必要。`kv260-ps` ではRTL検証ツール・Vivado・
 
 | プリセット | 実行場所 | 通常のbuildで生成するもの | 出力先 |
 |------------|----------|--------------------------|--------|
-| `host` | 開発機 | CPU参照テスト、RTLシミュレーター・テストベンチ | `build/host/` |
-| `kv260-pl` | 開発機 | FPGA回路・検査レポート・firmwareパッケージ | `build/kv260-pl/` |
-| `kv260-ps` | KV260 | カーネルドライバー、C使用例 | `build/kv260-ps/` |
+| `host` | 開発機 | CPU参照・RTL試験、C++ライブラリー・ベンチマーク | `build/host/` |
+| `kv260-pl` | 開発機 | FPGA回路・検査レポート・firmware、C++ライブラリー・ベンチマーク | `build/kv260-pl/` |
+| `kv260-ps` | KV260 | カーネルドライバー、Cツール、C++ライブラリー・ベンチマーク | `build/kv260-ps/` |
 
 各プリセットは `cmake --build --preset <名前>` で必要なものをまとめてビルドする。
 CPU参照・RTL試験は `ctest --preset host`、実機試験は `host/tests/` のPythonを使う。
+C++ライブラリーとベンチマークは既定で有効。不要な場合はconfigure時に
+`-DFADES_BUILD_CPP=OFF` を指定する。RTL・カーネルモジュールをビルドせずC++のみを
+ビルドする場合は `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
 
 コア数はプリセットとは独立した `-DFADES_CORES=1`〜`6`（既定6）。
 ボードトップからコア群まで伝播し、シミュレーションにも同じ値を使う。
@@ -139,57 +154,29 @@ ctest --test-dir build/host-1core --output-on-failure -L '^fades$'
 
 ## ソースを読む順序
 
-| 対象         | 読むファイル                                                        | 役割                                        |
-|--------------|---------------------------------------------------------------------|---------------------------------------------|
-| PS要求仕様   | `host/README.md`                                                  | 要求仕様と削除前の確認内容                  |
-| Linux接続    | `host/driver/include/fades_ioctl.h` → `host/driver/src/fades.c`                | 公開ABI → バッファ・DMA・制御               |
-| ボード生成   | `fpga/kv260/scripts/build.tcl`                                      | PS・DMA・クロックの接続、実装、出力検査     |
-| PLの入口     | `rtl/fades_axi.sv` → `fades.sv`                                     | 制御 → 供給・ID管理・結果回収・コア群       |
-| 探索         | `rtl/fades_core.sv` → `deduction_engine.sv` / `branch_generator.sv` | 状態列・探索 → 推論 / 分岐                  |
-| クロック境界 | `rtl/async_queue.sv`                                                | XPM非同期FIFOと試験用モデル                 |
-| CPU照合      | `reference/sudoku.hpp`                                              | RTL試験用の独立参照ソルバー                 |
+| 対象 | 読むファイル | 役割 |
+| --- | --- | --- |
+| ホスト利用 | `host/README.md` | 転送形式、C/C++ API、ベンチマーク・実機試験 |
+| Linux接続 | `host/driver/include/fades_ioctl.h` → `host/driver/src/fades.c` | 公開ABI → バッファ・DMA・制御 |
+| C++接続 | `host/lib/include/fades/stream_device.hpp` → `host/lib/src/stream_device.cpp` | 公開API → ioctl / mmap / poll |
+| ボード生成 | `fpga/kv260/scripts/build.tcl` | PS・DMA・クロックの接続、実装、出力検査 |
+| PLの入口 | `rtl/fades_axi.sv` → `fades.sv` | 制御 → 供給・ID管理・結果回収・コア群 |
+| 探索 | `rtl/fades_core.sv` → `deduction_engine.sv` / `branch_generator.sv` | 状態列・探索 → 推論 / 分岐 |
+| クロック境界 | `rtl/async_queue.sv` | XPM非同期FIFOと試験用モデル |
+| CPU照合 | `reference/sudoku.hpp` | RTL試験用の独立参照ソルバー |
 
-`build/` は生成物、`results/` は生ログ・実験履歴、`docs/` はローカル設計メモ。
+`build/` はビルド生成物。
 
 ## 実測
 
-現行ABI v6の可変バッファ・個別mmap・リング2/32枠の実機検証は
-[host/ABI6_RESULTS.md](host/ABI6_RESULTS.md) を参照。
+KV260 / Linux `6.8.0-1036-xilinx`、ABI v8、TX 8面 / RX 64面で、
+C++ベンチマークによる17ヒント49,158問の反復投入を5秒ずつ3回測定した。
+結果は **27.6092 / 27.6097 / 27.6097 Mproblem/s**。各回の処理数は138,166,272件。
 
-以下は削除前のホストC++実装による測定記録。
-
-ABI v5 はTX/RX双方が可変のBufferPool API。既存HWを変更せず、入力コピー・ID更新・
-RAII投入／返却・最終排出込み、出力内容のCPU読み出しなしで **27.618329 Mproblem/s**
-（TX 8 / RX 64、10秒×3回の中央値）。TX 8 / RX 8では **27.512729 Mproblem/s**。
-全6回Errors=0、前後各131,072件の全解・ID検証PASS。
-TX/RX 65/65など、両方向がSGリング長を超える構成も実機で検証済み。
-
-ABI v4 は入力8面固定・出力面数可変。**出力内容をCPUで読まない**ベンチマークでは、
-入力コピー・一意ID更新・RX返却・最終排出込みで **27.618074 Mproblem/s**
-（RX 256面、10秒×3回の中央値）。RX 8面では **27.570465 Mproblem/s**。
-既存回路をそのまま使い、6回ともErrors=0、前後各131,072件の全解・ID検証PASS。
-条件と可変RX／背圧試験は [host/STREAMING_RESULTS.md](host/STREAMING_RESULTS.md) を参照。
-
-ABI v3 の固定スロット・ゼロコピー出力では、**全結果の64 byteをCPUで読む処理込み**で
-**18.753654 Mproblem/s**（10秒の最終確認、187,554,154件、Errors=0）。
-16,384問 × 入出力8面、6コア約115.385 MHz / DMA 187.5 MHz、入力コピー・RX返却・最終排出を含む。
-回路は WNS +0.037 ns / WHS +0.011 ns、BRAM 増加なしで配置配線・実機検証を通過した。
-
-従来の ABI v2 の継続投入は、入力コピー・ID 更新込みで **27.620716 Mproblem/s**
-（10秒×3回の中央値）。180秒で **4,971,960,000件**を処理し Errors=0。
-1万問 × 8面、6コア約115.385 MHz / DMA 187.5 MHz、最終排出を含む。
-測定範囲と検証結果は [host/STREAMING_RESULTS.md](host/STREAMING_RESULTS.md)。
-この旧測定は全出力の CPU 読み出しを含まないため、測定条件が異なる。
-
-以下は旧 ABI v1 の準備済み DDR 反復測定で、測定条件が異なる。
-
-KV260 実機で 17 ヒント 49,158 問と Hard 1106 の 375 問を CPU 参照解と照合済み。
-2026-11-07、通常の `kv260-pl` ビルド（Vivado 2024.2、6コア、並列数4）で生成した回路を使用。
-実クロックはcore **115,384,615 Hz** / DMA **187,499,999 Hz**、kernel `6.8.0-1015-xilinx`。
-準備済みDDRの17ヒント集合を10秒×3回測定し、**26.590488 / 26.597169 / 26.597688 Msolve/s**、
-中央値 **26.597169 Msolve/s**。131,072件、8 DMAスロット×1 MiBを反復し、最終排出を計測に含む。
-CPU参照・入力準備・計測前後の全解検証は計測外。件数は延べ投入数。
-全測定Errors=0、各回の計測前後131,072件の全解・ID検証PASS、測定中のdmesg追加0行。
-ABI・全49,158問・mixed入力・難問375問の機能試験もPASS。
-最終タイミングはcore WNS +0.055 ns / DMA WNS +0.042 ns、全体WHS +0.010 ns、TNS / THS 0。
-入力データの出所は [sim/README.md](sim/README.md#問題集)。
+入力変換・初期TX投入は計測前に行い、計測には `STREAMON`、継続コピー・一意ID付与、
+ioctl、DMA・求解、RX返却と最終排出を含む。**出力の内容は読まず、件数だけ集計**した。
+実機の PS クロック読み出しは pl0 187,499,999 Hz、pl1 115,384,615 Hz。
+ロードした `fades.bit.bin` の SHA-256 は
+`1bc89fe1f9f3083061d277276cc28b6e7ceb0c5a59a733e2319df5677570fba8`。
+ビットストリーム内部のクロック構成はこの測定では別途確認していない。
+入力問題の出所は [sim/README.md](sim/README.md#問題集)。

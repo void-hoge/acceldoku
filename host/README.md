@@ -1,6 +1,18 @@
-# ホスト側の要求仕様
+# ホスト側のドライバーと API
 
-## 要求仕様
+KV260 の Linux から `/dev/fades` を使うためのカーネルドライバー、C ioctl ABI、
+C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++ とも ABI v8 を使用する。
+
+| パス | 内容 |
+| --- | --- |
+| `driver/include/fades_ioctl.h` | ioctl ABI の宣言 |
+| `driver/src/fades.c` | DMA・バッファー・制御を扱うカーネルモジュール |
+| `lib/include/fades/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
+| `tools/fades_run.c` | ioctl を直接使う C ベンチマーク |
+| `tools/cpp/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
+| `tests/` | ABI、ストリーム、停止通知、C++ API の実機試験 |
+
+## バッファーと所有権
 
 - TX/RX は独立したキューとして循環
 - バッファ数はそれぞれユーザー指定
@@ -9,29 +21,13 @@
 - ユーザーは `try_dequeue_*()` で空いた入力バッファ、または完了した出力バッファの番号を借用
   - 借りられるものがなければ、待たずに空を返す
   - 使用後は明示的に enqueue または TX の借用を解除
-- HW は、そのバッファがフルになった場合、または登録済みの全ての問題が終わったらそのバッファを返す
+- HW は RX バッファーが満杯になった場合、または登録済みの全問題が終わった場合に返す
 - 空きの RX がなくなると背圧が伝播し、最終的に空き TX もなくなる
   - RX の返却で再開
-- TX と RX のいずれかを待つ、TX のみを待つ、RX のみを待つ API が必要
+- TX と RX のいずれか、または片方向の完了を待てる
   - `poll` の完了通知を待ち、初期CPU所有 TX は待機前に取得する
-- Puzzle = std::array<uint8_t, 64>? 多分 ID と 81 セル？
-  - HW が扱う入力と出力の形式が揃ってるか確認
-  - 揃ってなければ HW 側を揃えて (多分 valid フラグみたいなのが出力側にはあるはず)
-- 入力バッファへの問題コピーと ID の付与、出力バッファからの結果の取得は呼び出し側の責務
-  - ベンチマーク時、出力内容を読むとおそすぎるので、件数だけ数える
-  - 入力は 512 バイトのプリフェッチと NEON で書き込むと間に合うらしい
-- 統計は数値添字ではなく名前付きフィールドにする
-- 公開宣言はinclude/、実装はsrc/に分ける。
-
-
-## verifyが確認していたこと
-
-- ID の重複・欠落がない
-- 問題を解ききった後、新たな問題を解き始めた時、古い問題が混入しない。
-- 解ありなら 81 セルが 1-9 で、入力と数独の制約を満たし、CPU の参照解と一致する。
-- 解なし、不正セルが正しく扱える
-- 出力の予約フィールドがゼロ
-- 投入・出力・dispatch・collect の HW 件数とコア別合計が一致し、各コアの最大 inflight が 2 以下
+- 入力への問題コピー・ID付与と、出力内容を読むかどうかは呼び出し側が選ぶ
+- 統計は名前付きフィールドで取得する
 
 ## 現行HWの転送形式
 
@@ -43,12 +39,13 @@
 - byte 49の上位4 bitからbyte 63までは予約領域。入力はゼロを設定しHWは無視、出力はゼロ。
 - 出力statusが0以外ならセルは全てゼロ。出力順は入力順とは限らず、IDで対応付ける。
 - HW versionは `0x46414404`。旧HWとは入力セルの位置が異なる。
-- ドライバーとABIは `driver/src/fades.c` / `driver/include/fades_ioctl.h` に残している。
+- C++ の `Puzzle` は81セル、`PuzzleRecord` は64バイトの転送レコード。
 
 ## C++ ストリーミング API
 
 `host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v8 を使う。
 `try_dequeue_tx()` / `try_dequeue_rx()` は各方向のバッファー番号を返し、空なら `std::nullopt` を返す。
+`StreamDevice::batch_capacity()` は1バッファーに格納できるレコード数を返す。
 `encode(id, puzzle)` は81セルを64バイトの `PuzzleRecord` に変換する。
 `record_id()`、`record_status()`、`decode_cells()` で出力を解釈できる。
 `write_tx(index, span)` は先頭から上書きする。`first_id` を追加するとコピー時にIDを連番で置き換える。
@@ -168,18 +165,31 @@ DMAリングは方向ごとに32枠固定、バッファ数とは独立。1枠�
 1面のDMAアドレス・転送長・状態を保持する。HW完了後に枠だけ再利用するので、
 バッファが65面以上でも転送・蓄積できる。リング長は公開設定にしない。
 所有数を明示管理するため、空/満杯判定のためのガード枠は不要。
-詳細・2枠との比較は [ABI6_RESULTS.md](ABI6_RESULTS.md) を参照。
 
-### C使用例と実機試験
+## ビルドと実機試験
 
-`host/tools/fades_run.c` をkv260-psの通常buildで `build/kv260-ps/host/tools/fades_run` に生成する。
-入力は上記の64-byteレコードを連結したバイナリーファイル。
-指定時間だけ連続投入し、結果は内容を読まず件数のみ集計する。
+KV260 のリポジトリルートで実行する。ロード手順とカーネルヘッダーの準備は
+[KV260 ボード実装](../fpga/kv260/README.md) を参照。
+
+```sh
+cmake --preset kv260-ps
+cmake --build --preset kv260-ps
+```
+
+`build/kv260-ps/host/driver/src/fades.ko`、Cツール
+`build/kv260-ps/host/tools/fades_run`、C++ライブラリーと
+`build/kv260-ps/host/tools/cpp/fades_benchmark` が生成される。
+C++のみなら `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
+
+以下は `/dev/fades` を利用できる状態で実行する。Cツールの入力は上記の64バイト
+レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、
+結果は内容を読まず件数のみ集計する。
 
 ```sh
 # 連続投入：入力集合を反復コピーし、一意IDを付与。出力内容は読まず件数だけ数える。
 # 開始後の入力コピー、投入・回収、RX返却、DMA/求解、最終排出を計測に含む。
 build/kv260-ps/host/tools/fades_run input.raw 8 64 10
+build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
 
 python3 host/tests/check_abi.py
 python3 host/tests/check_poll_stop.py
@@ -188,8 +198,14 @@ python3 host/tests/check_stream.py --tx 8 --rx 64
 python3 host/tests/check_stream.py --tx 65 --rx 65
 python3 host/tests/check_example.py build/kv260-ps/host/tools/fades_run \
     --corpus sim/data/17puz49158.txt --seconds 5 --repeat 3
+
+# C++ API の変換・所有権・停止再開を実機で確認
+c++ -std=c++20 -O2 -D_FILE_OFFSET_BITS=64 \
+    -Ihost/lib/include -Ihost/driver/include \
+    host/lib/src/stream_device.cpp host/tests/cpp_smoke.cpp -o /tmp/fades_cpp_smoke
+/tmp/fades_cpp_smoke
 ```
 
 連続投入の計測はセットアップ・ファイル読み込み・初回の入力コピーと投入・出力内容の検証を含まない。
-アプリも新ヘッダーでビルドする。v7からは `STREAMOFF` のioctl番号とABI番号が変更され、
-ioctlマクロは `FADESIOC_*` に改名された。構造体・他のioctl番号・mmap方法は同じ。
+アプリは現行ヘッダーでビルドする。v7からは `STREAMOFF` のioctl番号とABI番号が変更され、
+ioctlマクロは `FADESIOC_*` に改名された。
