@@ -1,153 +1,211 @@
-# PS / Linux ソフトウェア
+# ホスト側のドライバーと API
 
-`/dev/fades` を使うユーザープログラムと Linux DMAengine クライアント。
-PS は問題の選択・反復と入出力バッファを管理し、PL はストリームを処理する。
+KV260 の Linux から `/dev/fades` を使うためのカーネルドライバー、C ioctl ABI、
+C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++ とも ABI v8 を使用する。
 
-## ディレクトリ
+| パス | 内容 |
+| --- | --- |
+| `driver/include/fades_ioctl.h` | ioctl ABI の宣言 |
+| `driver/src/fades.c` | DMA・バッファー・制御を扱うカーネルモジュール |
+| `lib/include/fades/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
+| `tools/fades_run.c` | ioctl を直接使う C ベンチマーク |
+| `tools/cpp/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
+| `tests/` | ABI、ストリーム、停止通知、C++ API の実機試験 |
 
-- `include/fades_ioctl.h`: ABI バージョン、ioctl、固定幅の共通構造体。
-- `driver/fades.c`: `fades.ko`。DMA バッファ、AXI-Lite、排他的 open、転送完了を管理。
-- `tools/fades_verify.cpp`: 件数指定の転送・CPU 参照解との照合・診断用の時間表示。
-- `tools/fades_benchmark.cpp`: ファイルと秒数を受け取る時間指定の性能測定。
-- `tests/check_abi.py`: 二重 open、不正 ioctl / mmap / 転送引数、close/reopen の検査。
-- `tests/check_input.py`: 両ツールの Usage と不正な問題テキストの拒否試験。
-- `tests/data/stress_mixed.txt`: 完成済み問題と矛盾する問題の小規模入力。
+## バッファーと所有権
 
-ホストの検証は `reference/sudoku.hpp` の独立 CPU ソルバーを RTL 試験と共有する。
-外部ソルバーの実行・ビルドは不要。
+- TX/RX は独立したキューとして循環
+- バッファ数はそれぞれユーザー指定
+- 1 バッファは 1MiB/16384問
+- バッファ数を増やしても、全体の物理連続領域を要求しない
+- ユーザーは `try_dequeue_*()` で空いた入力バッファ、または完了した出力バッファの番号を借用
+  - 借りられるものがなければ、待たずに空を返す
+  - 使用後は明示的に enqueue または TX の借用を解除
+- HW は RX バッファーが満杯になった場合、または登録済みの全問題が終わった場合に返す
+- 空きの RX がなくなると背圧が伝播し、最終的に空き TX もなくなる
+  - RX の返却で再開
+- TX と RX のいずれか、または片方向の完了を待てる
+  - `poll` の完了通知を待ち、初期CPU所有 TX は待機前に取得する
+- 入力への問題コピー・ID付与と、出力内容を読むかどうかは呼び出し側が選ぶ
+- 統計は名前付きフィールドで取得する
 
-## ビルド
+## 現行HWの転送形式
 
-KV260上のリポジトリルートから:
+- 1 問 64 バイトの little endian
+- ID は先頭 8 バイト
+- セルは 4 bit ずつ格納
+- 入出力ともbyte 8がstatus、セルはbyte 9から。81セルを行優先・先のセルを下位nibbleに格納。
+- 入力statusは0を設定し、HWは無視する。出力statusは0=解あり、1=解なし、2=不正セル値。
+- byte 49の上位4 bitからbyte 63までは予約領域。入力はゼロを設定しHWは無視、出力はゼロ。
+- 出力statusが0以外ならセルは全てゼロ。出力順は入力順とは限らず、IDで対応付ける。
+- HW versionは `0x46414404`。旧HWとは入力セルの位置が異なる。
+- C++ の `Puzzle` は81セル、`PuzzleRecord` は64バイトの転送レコード。
+
+## C++ ストリーミング API
+
+`host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v8 を使う。
+`try_dequeue_tx()` / `try_dequeue_rx()` は各方向のバッファー番号を返し、空なら `std::nullopt` を返す。
+`StreamDevice::batch_capacity()` は1バッファーに格納できるレコード数を返す。
+`encode(id, puzzle)` は81セルを64バイトの `PuzzleRecord` に変換する。
+`record_id()`、`record_status()`、`decode_cells()` で出力を解釈できる。
+`write_tx(index, span)` は先頭から上書きする。`first_id` を追加するとコピー時にIDを連番で置き換える。
+`enqueue_tx(index)` は最後に正常終了した書き込みの 1..16384 件を投入する。
+書き込み前または最後の書き込みが空の場合は投入せず例外を送出する。
+送信しない TX は `release_tx(index)`、RX は `enqueue_rx(index)` で明示的に返却する。
+RX の件数は `rx_size(index)`、内容は `read_rx(index, destination)` で取得する。
+範囲外や借用中でない番号の操作は例外となる。投入失敗時は借用を保持し、その場で例外を送出する。
+各番号は対応する方向で借用中にのみ利用できる。同じ番号の同時使用や返却後の利用は呼び出し側で防ぐ。
+再貸出後の番号は以前の借用と区別されない。明示返却しないバッファーは借用中のままになる。
+TX と RX はそれぞれ一つのスレッドが扱える。デバイスの開始・停止・破棄は
+バッファー操作と同期する。開始・停止はバッファーを借用中でも可能で、
+借用中の TX は再貸出せず、借用中の RX は返却されるまで再投入しない。
+`stream_on()` は借用されていない RX を投入する。
+`stream_off()` は転送中・待機中のデータを破棄するが、借用中の RX データは保持する。
+停止後は全待機スレッドの終了を確認してから再開する。
+`wait()` は `poll` による完了待ちで、初期CPU所有のTXは通知されない。
+開始時は初期TXを `try_dequeue_tx()` で取得・投入してから `wait()` する。
+未投入で返された空きTXもpollでは通知されず、次の待機前に再取得する。
+`wait(WaitFor::tx | WaitFor::rx)` で両方向を待てる。
+
+```cpp
+if (auto tx = device.try_dequeue_tx()) {
+    device.write_tx(*tx, puzzles, first_id);
+    device.enqueue_tx(*tx);
+}
+if (auto rx = device.try_dequeue_rx()) {
+    received += device.rx_size(*rx); // 内容を読むなら read_rx() を使う
+    device.enqueue_rx(*rx);
+}
+```
+
+```sh
+cmake -S . -B build/cpp -DFADES_BUILD_CPP=ON
+cmake --build build/cpp --target fades_benchmark
+build/cpp/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+```
+
+入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
+ベンチマークは計測前に変換して初期 TX を投入し、その後は入力を反復コピーし ID を更新する。
+結果は件数のみ数え、計測には開始・継続コピー、投入・回収、求解と最終排出を含む。
+
+## 現行C I/F：ABI v8
+
+`driver/include/fades_ioctl.h` をincludeし、`/dev/fades` のioctl / mmap / pollを使う。
+現在のC ABIでは明示的に `QBUF` / `DQBUF` を行う。
+統計は `fades_solver_stats` の名前付きフィールドで取得する。
+
+### 設定と個別mmap
+
+```c
+struct fades_dma_config cfg = {.tx_buffers = 8, .rx_buffers = 64};
+ioctl(fd, FADESIOC_DMA_CONFIG, &cfg);
+
+struct fades_buffer_info b = {.queue = FADES_QUEUE_TX, .index = 3};
+ioctl(fd, FADESIOC_QUERYBUF, &b);
+void *tx3 = mmap(NULL, b.map_bytes, PROT_READ | PROT_WRITE,
+                 MAP_SHARED, fd, (off_t)b.mmap_offset);
+```
+
+実際のコードではすべての戻り値を確認する。`mmap` の失敗は `MAP_FAILED`。
+64-bitのオフセットを使用するため、32-bit userspaceでは `_FILE_OFFSET_BITS=64` を指定する。
+
+- `DMA_INFO`：ABI、1面のサイズ、方向ごとの上限、設定済みTX/RX面数を取得。
+  open直後の面数は0。
+- `DMA_CONFIG`：TX/RXそれぞれ1〜4096面、1面1 MiBを指定する。全体が物理連続である
+  必要はなく、各面を独立確保する。実際の確保限界は利用可能なDMAメモリーによる。
+  物理RAM総量を超える要求や確保失敗は `ENOMEM`。途中失敗は全解放して再試行可能。
+  データ領域は `__GFP_NORETRY` で確保し、要求のためにOOM killerを起動しない。
+- 設定成功はopenごとに1回だけ。再設定は `EBUSY`。予約フィールドは0。
+- `QUERYBUF`：queue/indexを指定すると、その面の `mmap_offset` / `map_bytes` を返す。
+  オフセットは不透明な識別値で、物理/DMAアドレスではない。算出規則に依存しないこと。
+- 1面ずつ、返されたサイズとオフセットで `MAP_SHARED` を使ってマップする。
+  別の面の仮想アドレスが連続する保証はない。ポインターを面ごとに保存する。
+
+### 投入・回収と所有権
+
+```text
+open → CONFIG → 各面のQUERYBUF / mmap
+     → 空のRX面をQBUF → TX面に書き込んでQBUF → STREAMON
+     → poll / DQBUF / QBUF
+     → 最終TX投入後はRXのみpoll → 投入件数分を回収
+     → STREAMOFF → munmap / close
+```
+
+- TXの `QBUF` は `records=1..16384`、RXは `records=0`。
+- 設定直後は全TX/RX面がCPU所有。空のRXと入力を書き込んだTXをそれぞれ投入する。
+- `QBUF` 後はDMA側所有。`DQBUF` で回収するまでその面にアクセスしない。
+- TXの完了は転送元として再利用可能という意味で、求解完了ではない。
+- RXの `DQBUF` は実際の出力件数を返す。内容を読む必要はなく、件数だけ数えて返却できる。
+- `DQBUF` は常にノンブロッキングで、完了なしは `EAGAIN`。
+  `poll` の `POLLOUT` は完了TX、`POLLIN` は完了RXの回収可能を表す。
+  初期CPU所有のTX面があること自体は `POLLOUT` の条件ではない。
+- 待機対象は `poll` のeventsで指定する。TXのみは `POLLOUT`、RXのみは `POLLIN`、
+  両方は `POLLOUT | POLLIN`。pollは完了を消費せず、回収するまで即座に戻る。
+- 入力終了通知は不要。RXは満杯または登録済み全問題の完了で端数を含めて返る。
+  最終投入後はRXのみを待ち、回収件数が投入件数に達したら終了する。idle後の再投入も可能。
+- v7で `END_INPUT` を削除し、v8では番号6を `STREAMOFF` に割り当てた。
+- `STREAMOFF` は転送をリセットし、全面をCPU所有に戻す。設定とマッピングは維持する。
+- `STREAMOFF` が成功すると、初回 `STREAMON` 前の呼び出しを含め、待機方向にかかわらず
+  `poll` は `POLLHUP` を返す。停止後にpollした場合も、次の `STREAMON` 成功まで通知が続く。
+  初回open直後は通知しない。停止失敗時は `POLLERR`、デバイス取り外し時は `POLLERR | POLLHUP`。
+- 複数スレッドでfdを共有する場合は、`STREAMOFF` 後に全poll待機スレッドが停止を確認して
+  終了するまで待ってから再開する。先に `STREAMON` が成功すると、停止通知を見逃しうる。
+- 同時openは1つ。VMAはファイルを保持するため、fdをcloseしてもmmapが残る間は
+  メモリーと排他所有が維持される。終了時は明示的に停止し、全VMAとfdを解放する。
+  最後の参照の解放後、次のopenは未設定状態から始まる。
+
+### 大容量バッファとDMAリング
+
+出力読み出しを入力供給のクリティカルパスから外すことが目的。
+TX/RXを事前投入し、十分なRX容量があれば、アプリが出力を一度も回収しなくても
+ドライバーが次の面を登録して転送を継続する。完了面は上書きせず保持する。
+RXが全て埋まれば背圧で停止し、面の返却で再開する。
+
+DMAリングは方向ごとに32枠固定、バッファ数とは独立。1枠はデータを格納せず、
+1面のDMAアドレス・転送長・状態を保持する。HW完了後に枠だけ再利用するので、
+バッファが65面以上でも転送・蓄積できる。リング長は公開設定にしない。
+所有数を明示管理するため、空/満杯判定のためのガード枠は不要。
+
+## ビルドと実機試験
+
+KV260 のリポジトリルートで実行する。ロード手順とカーネルヘッダーの準備は
+[KV260 ボード実装](../fpga/kv260/README.md) を参照。
 
 ```sh
 cmake --preset kv260-ps
 cmake --build --preset kv260-ps
-ctest --preset kv260-ps
 ```
 
-必要ツールはCMake 3.25以降、Ninja、C++20、Python 3。
-モジュールはKV260上で、その実行中カーネルに対応したヘッダーを使ってビルドする。
-Ubuntu / Arm64では `build-essential cmake ninja-build python3` と
-`linux-headers-$(uname -r)` が必要。ヘッダーが別の場所ならconfigure時に
-`-DFADES_KERNEL_BUILD=/path/to/kernel/build` を指定する。
+`build/kv260-ps/host/driver/src/fades.ko`、Cツール
+`build/kv260-ps/host/tools/fades_run`、C++ライブラリーと
+`build/kv260-ps/host/tools/cpp/fades_benchmark` が生成される。
+C++のみなら `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
 
-通常のbuildでホストツールとドライバーを両方生成する。
-ホストツールは `build/kv260-ps/host/`、モジュールはその `driver/fades.ko` に生成する。
-`kv260-ps` は実機上のネイティブビルドで、RTLツール・Vivadoは不要。
-入力試験はCTestで実行し、実機ABI試験はロード後に
-`python3 host/tests/check_abi.py` で実行する。
-コンパイラーやフラグは `CMAKE_CXX_COMPILER`、`CMAKE_CXX_FLAGS` で指定できる。
-Linux Kbuildを呼び出すため、`host/driver/Makefile` は保持する。
-ドライバーのソースは変更時のみビルド先へコピーし、Kbuildがヘッダーを含む依存関係を確認する。
-開発機では `host` プリセットを使い、C++ツールとRTLシミュレーションをビルドする。
-実行ファイルは `build/host/host/` に生成し、開発機のカーネルヘッダーは要求しない。
-ソース・firmwareの実機へのコピーはユーザーが行い、CMakeから自動転送は行わない。
-回路の転送・ロード・デバイス作成は [KV260 手順](../fpga/kv260/README.md) を参照。
-
-## メモリと転送
-
-INFO ioctl で ABI とスロット構成を確認してから、TX/RX をそれぞれ `mmap` する。
-
-|領域|mmap offset|長さ|
-|---|---:|---:|
-|TX|0|`info.map_bytes`|
-|RX|`info.map_bytes`|`info.map_bytes`|
-
-現行は各 8 MiB、1 MiB × 8 slot。1 レコード 64 byte なので最大 131,072 件。
-バッファは DMA デバイス上で `dma_alloc_coherent` し、`dma_mmap_coherent` で公開する。
-非コヒーレント HP ポート向けのマッピング属性は Linux が管理する。
-ユーザー空間は物理アドレスや手動の cache flush を扱わない。
-
-`FADES_DMA_RUN` は全 RX descriptor を先に準備し、TX とともに起動して全完了まで待つ。
-**RUN 中は CPU から TX/RX を読み書きしない。** `valid && !ready` の停止は PL が扱う。
-結果は入力 slot の順序に対応しないため、全 RX 領域を request ID で照合する。
-
-各 round は全体を排出してから次を開始し、round ごとに回路をリセットして総件数と
-packet 長を設定する。連続 SG リングを途切れなく補充する実装ではない。
-異常時は両チャネルを停止し、ドライバーを faulted にする。
-タイムアウト等の後はアプリとモジュールを再ロードしてから再開する。
-
-公開ABIは `include/fades_ioctl.h`。INFOはバッファ構成、RUNは転送・完了待ち、STATSは
-counter snapshotを扱う。DMAの問題・結果レコードはリトルエンディアンの64 byte。
-
-|フィールド|入力bit|出力bit|
-|---|---|---|
-|request ID|63:0|63:0|
-|status|なし|71:64|
-|81セル x 4 bit|387:64|395:72|
-|予約|511:388|511:396|
-
-セルは行優先・先頭セルが下位nibble。入力の0は空欄、1〜9はヒント。
-statusは0=解あり、1=解なし、2=不正セル。解なし・不正セル時の出力セル列と予約領域はゼロ。
-入力予約領域はゼロで送信する。IDは未完了リクエスト間で一意にする。
-ストリームは128 bit x 4 beat/record、全TKEEP有効、出力TLASTは設定件数ごとのpacket末尾。
-
-## 共通の問題テキスト形式
-
-1 行に **81 文字**を行優先で並べ、空欄は `.`、ヒントは `1〜9`。
-セル間・行頭・行末の空白は付けない。LF / CRLF の両方に対応し、空行は読み飛ばす。
-長さの異なる行や `0`・`-`・空白などの不正文字は拒否する。
-両プログラムとシミュレーションは共通の `reference::parse` で読み込む。
-同梱データは BinarySudoku 原本の `sim/data/17puz49158.txt` と
-`sim/data/HardestDatabase110626.txt`。ファイル名・内容・改行をそのまま使用する。
-
-## `fades_verify`
+以下は `/dev/fades` を利用できる状態で実行する。Cツールの入力は上記の64バイト
+レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、
+結果は内容を読まず件数のみ集計する。
 
 ```sh
-build/kv260-ps/host/fades_verify DATASET RECORDS_PER_PACKET SLOTS ROUNDS [mixed]
-build/kv260-ps/host/fades_verify sim/data/17puz49158.txt 8193 6 1
-build/kv260-ps/host/fades_verify sim/data/17puz49158.txt 1024 3 1 mixed
-build/kv260-ps/host/fades_verify sim/data/HardestDatabase110626.txt 375 1 1
+# 連続投入：入力集合を反復コピーし、一意IDを付与。出力内容は読まず件数だけ数える。
+# 開始後の入力コピー、投入・回収、RX返却、DMA/求解、最終排出を計測に含む。
+build/kv260-ps/host/tools/fades_run input.raw 8 64 10
+build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+
+python3 host/tests/check_abi.py
+python3 host/tests/check_poll_stop.py
+python3 host/tests/check_stream.py --tx 1 --rx 1
+python3 host/tests/check_stream.py --tx 8 --rx 64
+python3 host/tests/check_stream.py --tx 65 --rx 65
+python3 host/tests/check_example.py build/kv260-ps/host/tools/fades_run \
+    --corpus sim/data/17puz49158.txt --seconds 5 --repeat 3
+
+# C++ API の変換・所有権・停止再開を実機で確認
+c++ -std=c++20 -O2 -D_FILE_OFFSET_BITS=64 \
+    -Ihost/lib/include -Ihost/driver/include \
+    host/lib/src/stream_device.cpp host/tests/cpp_smoke.cpp -o /tmp/fades_cpp_smoke
+/tmp/fades_cpp_smoke
 ```
 
-ファイルを巡回して各 slot に同数の問題を入れる。`8193 6` は 49,158 問を一巡する。
-`mixed` は末尾 64 件を矛盾する問題 32 件と不正セル値の問題 32 件に置換する。
-
-計測前に CPU 参照解を生成し、warmup と計測後の全結果について以下を検査する。
-
-- ID の範囲・重複・件数、期待する status。
-- 81 セルの数字、行・列・ブロックの制約、入力ヒントの保持。
-- CPU 参照ソルバーが選んだ解との一致。
-- 予約領域、および解なし・不正入力時のセルがゼロ。
-- PL の各段・コア別件数と未完了上限。
-
-参照ソルバーは最初の解を求める。複数解の入力では、別の正しい解でも参照解との
-完全一致検査に失敗しうるため、このツールの通常入力には一意解の問題集を使う。
-反復測定の中間 round は DMA 完了を検査し、CPU で全解を逐一照合するものではない。
-
-## `fades_benchmark`
-
-```sh
-build/kv260-ps/host/fades_benchmark PUZZLE_FILE SECONDS
-build/kv260-ps/host/fades_benchmark sim/data/17puz49158.txt 10
-```
-
-引数は問題ファイルと実行時間だけ。秒数は有限の `0.001〜86400`、小数も指定可能。
-解なし・複数解も使用でき、解があれば数独制約と入力ヒントを満たす解を検証する。
-
-1 round は 8 × 1 MiB = 131,072 件。小さいファイルは問題を先頭から循環して
-準備済み DDR を充填・反復する。ファイルがバッファより大きい場合はウィンドウを
-切り替え、計測中の再充填時間を別表示する。ID は未完了リクエスト間で一意とし、
-全件排出済みの round 間では再利用する。
-
-計測前にファイル読み込み、CPU 参照による解の有無の判定、DDR 準備、warmup と全件検証を行う。
-計測中は DMA 完了と PL の各段・コア別件数を毎 round 検査し、終了後に最後のバッチを
-全件検証する。中間 round の全解は CPU で逐一照合しない。
-
-期限後に新規 RUN を始めず、実行中のバッチを最後まで排出する。
-速度は **実経過時間**で計算し、指定時間、期限超過、期限前 / 後のバッチ完了件数を分ける。
-期限前件数は whole-batch 単位の保守的な値であり、レコードごとの厳密な完了時刻ではない。
-件数は同じ問題の再投入を含む延べ件数。
-
-## 計測範囲
-
-|表示・値|含むもの|
-|---|---|
-|`fades_verify` の kernel 時間|reset/config、descriptor 準備、DMA、数独処理、出力排出、完了待ち|
-|`fades_benchmark` の実時間|上記に加え PS ループ、snapshot と件数検査、大規模ファイルの再充填|
-|PL processing cycles|最初の配布から最後の結果回収まで。最後の DMA 出力排出は含まない|
-|`fades_verify` の single-round 総合時間|入力準備・コピー、RUN、snapshot、全解検証|
-
-CPU 参照解の事前生成は全ての速度値の区間外。
-準備済み DDR の速度と、ホスト側の全件検証を含む速度を区別する。
+連続投入の計測はセットアップ・ファイル読み込み・初回の入力コピーと投入・出力内容の検証を含まない。
+アプリは現行ヘッダーでビルドする。v7からは `STREAMOFF` のioctl番号とABI番号が変更され、
+ioctlマクロは `FADESIOC_*` に改名された。
