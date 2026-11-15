@@ -150,16 +150,10 @@ std::size_t StreamDevice::rx_size(std::uint32_t index) const {
     return rx_records_[index];
 }
 
-void StreamDevice::read_rx(std::uint32_t index, std::span<PuzzleRecord> destination) const {
+std::span<const PuzzleRecord> StreamDevice::read_rx(std::uint32_t index) const {
     check_rx(index);
-    auto size = rx_records_[index];
-    if (destination.size() < size) {
-        throw std::length_error("RX destination too small");
-    }
-    if (size) {
-        std::memcpy(destination.data(), buffer_mappings_[FADES_QUEUE_RX][index],
-                    size * sizeof(PuzzleRecord));
-    }
+    return {static_cast<const PuzzleRecord *>(buffer_mappings_[FADES_QUEUE_RX][index]),
+            rx_records_[index]};
 }
 
 void StreamDevice::enqueue(unsigned direction, unsigned index, unsigned count) {

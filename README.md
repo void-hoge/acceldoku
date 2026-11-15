@@ -22,7 +22,8 @@ Linux カーネルドライバー、C ioctl ABI、C++20 ライブラリーと実
 | --- | --- | --- |
 | C ioctl ABI / ドライバー | `host/driver/include/fades_ioctl.h`、`host/driver/src/fades.c` | `/dev/fades` の DMA・バッファー・制御 |
 | C++ ライブラリー | `host/lib/include/fades/stream_device.hpp`、`host/lib/src/stream_device.cpp` | レコード変換とストリーミング操作 |
-| C / C++ ベンチマーク | `host/tools/fades_run.c`、`host/tools/cpp/benchmark.cpp` | 入力を反復投入し、結果を件数のみ集計 |
+| C / C++ ベンチマーク | `host/tools/fades_run.c`、`host/tools/cpp/benchmark/benchmark.cpp` | 入力を反復投入し、結果を件数のみ集計 |
+| C++ 固定件数検証 | `host/tools/cpp/verify/` | fastdoku の結果と順序非依存チェックサムを照合 |
 
 C++ ベンチマークは 1 行 81 文字の問題テキストを入力する。デバイスの準備後、KV260 で実行する。
 

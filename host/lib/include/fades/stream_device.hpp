@@ -154,12 +154,13 @@ class StreamDevice {
     std::size_t rx_size(std::uint32_t index) const;
 
     /**
-     * @brief Copy all received records from a borrowed RX buffer.
+     * @brief View the received records in a borrowed RX buffer without copying.
      * @param index Borrowed RX buffer index.
-     * @param destination Destination with room for at least rx_size(index) records.
-     * @throws std::length_error If the destination is too small.
+     * @return Read-only view valid until successful enqueue_rx(index) or destruction.
+     * @details The view remains valid across stream_off() and stream_on() while borrowed.
+     * The caller must not access it after returning the buffer.
      */
-    void read_rx(std::uint32_t index, std::span<PuzzleRecord> destination) const;
+    std::span<const PuzzleRecord> read_rx(std::uint32_t index) const;
 
     /**
      * @brief Submit the last successfully written TX records.

@@ -38,6 +38,8 @@ int main() {
     expect_error<std::out_of_range>([&] { device.write_tx(1, puzzles); });
     expect_error<std::logic_error>([&] { device.enqueue_tx(0); });
     expect_error<std::logic_error>([&] { device.rx_size(0); });
+    expect_error<std::logic_error>([&] { device.read_rx(0); });
+    expect_error<std::out_of_range>([&] { device.read_rx(1); });
     expect_error<std::out_of_range>([&] { device.rx_size(1); });
     expect_error<std::invalid_argument>([&] { device.wait(static_cast<fades::WaitFor>(0)); });
     expect_error<std::invalid_argument>([&] { device.wait(static_cast<fades::WaitFor>(4)); });
@@ -72,9 +74,8 @@ int main() {
             device.wait(fades::WaitFor::rx);
             if (auto rx = device.try_dequeue_rx()) {
                 auto count = device.rx_size(*rx);
-                std::array<fades::PuzzleRecord, 3> result{};
-                expect_error<std::length_error>([&] { device.read_rx(*rx, {}); });
-                device.read_rx(*rx, result);
+                auto result = device.read_rx(*rx);
+                assert(result.size() == count);
                 for (unsigned i = 0; i < count; ++i) {
                     auto id = result[i][0];
                     assert(id >= 1 && id <= 3 && !seen[id - 1]);
@@ -83,6 +84,7 @@ int main() {
                 }
                 received += count;
                 device.enqueue_rx(*rx);
+                expect_error<std::logic_error>([&] { device.read_rx(*rx); });
                 expect_error<std::logic_error>([&] { device.enqueue_rx(*rx); });
             }
         }
@@ -97,23 +99,21 @@ int main() {
     device.wait(fades::WaitFor::rx);
     auto held_rx = device.try_dequeue_rx();
     assert(held_rx && device.rx_size(*held_rx) == 1);
+    auto held_view = device.read_rx(*held_rx);
     device.wait(fades::WaitFor::tx);
     auto held_tx = device.try_dequeue_tx();
     assert(held_tx);
     device.stream_off();
     assert(!device.try_dequeue_tx());
     device.stream_on();
-    std::array<fades::PuzzleRecord, 1> result{};
-    device.read_rx(*held_rx, result);
-    assert(result[0] == puzzles[0]);
+    assert(held_view[0] == puzzles[0]);
     device.enqueue_rx(*held_rx);
     device.write_tx(*held_tx, std::span(puzzles).first(1));
     device.enqueue_tx(*held_tx);
     device.wait(fades::WaitFor::rx);
     auto next_rx = device.try_dequeue_rx();
     assert(next_rx && device.rx_size(*next_rx) == 1);
-    device.read_rx(*next_rx, result);
-    assert(result[0] == puzzles[0]);
+    assert(device.read_rx(*next_rx)[0] == puzzles[0]);
     device.enqueue_rx(*next_rx);
     device.stream_off();
 }

@@ -9,7 +9,8 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 | `driver/src/fades.c` | DMA・バッファー・制御を扱うカーネルモジュール |
 | `lib/include/fades/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
 | `tools/fades_run.c` | ioctl を直接使う C ベンチマーク |
-| `tools/cpp/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
+| `tools/cpp/benchmark/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
+| `tools/cpp/verify/` | fastdoku と出力チェックサムを比較する固定件数検証 |
 | `tests/` | ABI、ストリーム、停止通知、C++ API の実機試験 |
 
 ## バッファーと所有権
@@ -52,7 +53,10 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 `enqueue_tx(index)` は最後に正常終了した書き込みの 1..16384 件を投入する。
 書き込み前または最後の書き込みが空の場合は投入せず例外を送出する。
 送信しない TX は `release_tx(index)`、RX は `enqueue_rx(index)` で明示的に返却する。
-RX の件数は `rx_size(index)`、内容は `read_rx(index, destination)` で取得する。
+RX の件数は `rx_size(index)`、内容は `read_rx(index)` が返すコピーなしの
+`std::span<const PuzzleRecord>` で取得する。保持する必要があれば呼び出し側でコピーする。
+ビューは `enqueue_rx(index)` の成功時またはデバイスの破棄時に無効になり、
+借用中の `stream_off()`・`stream_on()` をまたいでは有効である。
 範囲外や借用中でない番号の操作は例外となる。投入失敗時は借用を保持し、その場で例外を送出する。
 各番号は対応する方向で借用中にのみ利用できる。同じ番号の同時使用や返却後の利用は呼び出し側で防ぐ。
 再貸出後の番号は以前の借用と区別されない。明示返却しないバッファーは借用中のままになる。
@@ -87,6 +91,29 @@ build/cpp/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
 入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
 ベンチマークは計測前に変換して初期 TX を投入し、その後は入力を反復コピーし ID を更新する。
 結果は件数のみ数え、計測には開始・継続コピー、投入・回収、求解と最終排出を含む。
+
+### 固定件数の検証
+
+Rust の Cargo と fastdoku サブモジュールが必要。検証機向けにビルド済みの
+`libfades_fastdoku_ffi.a` がある場合は `-DFADES_FASTDOKU_ARCHIVE=/絶対パス` も指定できる。
+
+```sh
+cmake -S . -B build/verify -DFADES_BUILD_VERIFY=ON
+cmake --build build/verify --target fades_verify
+build/verify/host/tools/cpp/fades_verify sim/data/17puz49158.txt
+```
+
+入力ファイルの空行以外の全問題を一度ずつ投入する。TX/RX バッファー数は各 4、
+検証スレッド数も 4 に固定する。計測前に各問題を fastdoku で解き、
+解が一意または解なしであることを確認する。複数解の場合は検証を中止する。
+ID は 0 からの連番。期待値と実際の各64バイトレコード（ID、status、セル、予約領域）を
+4 本の 32-bit word ハッシュと 64-bit avalanche でハッシュし、件数、剰余和、XOR を比較する。
+各 RX バッチの読み取りを並列化し、
+全スレッドの処理完了後に RX を返却する。AArch64 の little-endian 環境では
+レコード内の 4 本のハッシュを NEON で同時に計算する。
+集約は出力順に依存しないが、ハッシュ衝突の可能性がある。リファレンス解答と
+期待チェックサムの生成は計測外、出力の読み取りとチェックサムは計測内。
+最後の部分バッチを含め全件排出し、ハードウェアの累積件数も確認する。
 
 ## 現行C I/F：ABI v8
 
