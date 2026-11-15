@@ -1,0 +1,3 @@
+[submodule "reference/fastdoku"]
+	path = reference/fastdoku
+	url = https://github.com/rocketbombs/fastdoku.git

@@ -33,31 +33,14 @@ int main(int argc, char** argv) {
         require(multiple.solutions == 2, "Empty board must have multiple solutions");
         auto complete = reference::solve(multiple.first, 2);
         require(complete.solutions == 1 && complete.first == multiple.first, "Completed board");
-        auto zero = empty;
-        zero[0] = 0;
-        require(!reference::solve(zero, 2).solutions, "Zero candidate cell");
         auto duplicate = empty;
         duplicate[0] = duplicate[1] = 1;
         require(!reference::solve(duplicate, 2).solutions, "Duplicate givens");
         auto hall = empty;
         for (unsigned i = 0; i < 9; ++i) hall[i] = i < 3 ? 3 : 508;
-        require(!reference::solve(hall, 2).solutions, "Search-required contradiction");
-        auto forced = empty;
-        for (unsigned i = 1; i < 9; ++i) { forced[i] = 510; forced[9*i] = 509; }
-        require(!reference::solve(forced, 2).solutions, "Conflicting hidden singles");
-        // Lock digit 1 into the top row of the top-left box.
-        auto pointing = empty;
-        for (unsigned r = 1; r < 3; ++r)
-            for (unsigned c = 0; c < 3; ++c) pointing[9*r+c] &= ~1u;
-        require(reference::propagate(pointing), "Pointing contradiction");
-        for (unsigned c = 3; c < 9; ++c)
-            require(!(pointing[c] & 1), "Missing pointing elimination");
-        auto claiming = empty;
-        for (unsigned c = 3; c < 9; ++c) claiming[c] &= ~1u;
-        require(reference::propagate(claiming), "Claiming contradiction");
-        for (unsigned r = 1; r < 3; ++r)
-            for (unsigned c = 0; c < 3; ++c)
-                require(!(claiming[9*r+c] & 1), "Missing claiming elimination");
+        bool rejected_candidates = false;
+        try { (void)reference::solve(hall); } catch (const std::invalid_argument&) { rejected_candidates = true; }
+        require(rejected_candidates, "Fastdoku must not silently discard candidate constraints");
         if (argc > 1) {
             std::ifstream input(argv[1]);
             require(bool(input), "Cannot open dataset");

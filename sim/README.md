@@ -2,12 +2,16 @@
 
 テストは目的別のディレクトリにまとめ、各 `CMakeLists.txt` がソース・生成物・
 実行条件を定義する。他の試験のコードや生成物には依存しない。
-CPU照合には `reference/sudoku.hpp` を使う。
+CPU照合には `reference/sudoku.hpp` の変換・検証を通して fastdoku を使う。
+任意の候補マスクによる矛盾や探索は、コア・推論エンジンの有向試験で検証する。
 
 ## 実行
 
-必要ツール: CMake 3.25以降、Ninja、C++20、Python 3、Icarus Verilog、Verilator、Yosys。
+必要ツール: CMake 3.25以降、Ninja、C++20、Rust / Cargo、Python 3、Icarus Verilog、Verilator、Yosys。
 実XPMの試験にはVivado 2024.2のxsimを使う。
+初回は `git submodule update --init --recursive` で fastdoku を取得する。
+Cargo はシミュレーションをビルドするときに C ABI ラッパーを静的ライブラリーとしてビルドする。
+ARM64 では fastdoku の NEON バックエンドが有効になる。
 
 ```sh
 cmake --preset host -DFADES_CORES=6
