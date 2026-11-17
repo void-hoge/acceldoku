@@ -25,15 +25,17 @@ inline void print_stats(std::ostream &out, const fades::SolverStats &stats) {
             << "  max_pending: " << stats.core_max_pending[i] << '\n'
             << "  evaluated: " << stats.core_evaluated[i] << '\n'
             << "  branches_per_problem: ";
-        if (stats.core_collected[i])
+        if (stats.core_collected[i]) {
             out << double(stats.core_branches[i]) / stats.core_collected[i];
-        else
+        } else {
             out << "N/A";
+        }
         out << "\n  busy_cycles_per_state: ";
-        if (stats.core_evaluated[i])
+        if (stats.core_evaluated[i]) {
             out << double(stats.core_busy_cycles[i]) / stats.core_evaluated[i];
-        else
+        } else {
             out << "N/A";
+        }
         out << '\n';
     }
 }

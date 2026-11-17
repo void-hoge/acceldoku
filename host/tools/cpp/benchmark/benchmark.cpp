@@ -1,5 +1,5 @@
-#include <fades/stream_device.hpp>
 #include "../stats.hpp"
+#include <fades/stream_device.hpp>
 
 #include <algorithm>
 #include <chrono>

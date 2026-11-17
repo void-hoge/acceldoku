@@ -1,5 +1,5 @@
-#include "checksum_workers.hpp"
 #include "../stats.hpp"
+#include "checksum_workers.hpp"
 #include <sudoku.hpp>
 
 #include <algorithm>
@@ -111,8 +111,8 @@ int main(int argc, char **argv) try {
     };
     print("expected", expected);
     print("actual", actual);
-    std::cout << "Threads: " << threads << "\nElapsed: " << elapsed << " s\nThroughput: "
-              << actual.count / elapsed / 1e6 << " Mproblem/s\n";
+    std::cout << "Threads: " << threads << "\nElapsed: " << elapsed
+              << " s\nThroughput: " << actual.count / elapsed / 1e6 << " Mproblem/s\n";
     print_stats(std::cout, stats);
     if (!(actual == expected) || stats.accepted != total || stats.emitted != total ||
         stats.dispatched != total || stats.collected != total) {
