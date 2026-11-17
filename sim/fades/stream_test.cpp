@@ -110,11 +110,16 @@ static void run(Sim& s, const std::vector<Problem>& ps, unsigned packet, bool st
         sum_got += d.core_result_counts;
         sum_busy += d.core_busy_cycles;
         check(d.core_max_inflight<=2,"Per-core limit exceeded");
+        check(d.core_evaluated >= d.core_branches + d.core_result_counts, "Evaluated states missing");
+        check(d.core_max_pending <= d.core_queue_peak, "Pending peak exceeds queue peak");
 #else
         sum_sent+=uint64_t(d.core_dispatch_counts[2*g]) | uint64_t(d.core_dispatch_counts[2*g+1])<<32;
         sum_got+=uint64_t(d.core_result_counts[2*g]) | uint64_t(d.core_result_counts[2*g+1])<<32;
         sum_busy+=uint64_t(d.core_busy_cycles[2*g]) | uint64_t(d.core_busy_cycles[2*g+1])<<32;
         check(d.core_max_inflight[2*g]<=2,"Per-core limit exceeded");
+        const auto counter = [g](const auto& v) { return uint64_t(v[2*g]) | uint64_t(v[2*g+1])<<32; };
+        check(counter(d.core_evaluated) >= counter(d.core_branches) + counter(d.core_result_counts), "Evaluated states missing");
+        check(counter(d.core_max_pending) <= counter(d.core_queue_peak), "Pending peak exceeds queue peak");
 #endif
     }
     check(sum_sent==ps.size() && sum_got==ps.size(),"Per-core accounting mismatch");

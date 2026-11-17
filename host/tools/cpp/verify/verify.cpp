@@ -1,3 +1,4 @@
+#include "../stats.hpp"
 #include "checksum_workers.hpp"
 #include <sudoku.hpp>
 
@@ -104,14 +105,15 @@ int main(int argc, char **argv) try {
     auto stats = device.stats();
     device.stream_off();
     auto print = [](const char *name, const Checksum &c) {
-        std::cout << name << ": count=" << c.count << " sum=" << std::hex << std::setfill('0')
-                  << std::setw(16) << c.sum << " xor=" << std::setw(16) << c.xors << std::dec
-                  << '\n';
+        std::cout << name << ":\n  count: " << c.count << "\n  sum: " << std::hex
+                  << std::setfill('0') << std::setw(16) << c.sum << "\n  xor: " << std::setw(16)
+                  << c.xors << std::dec << '\n';
     };
     print("expected", expected);
-    print("actual  ", actual);
-    std::cout << "threads=" << threads << ", elapsed=" << elapsed << " s, "
-              << actual.count / elapsed / 1e6 << " Mproblem/s\n";
+    print("actual", actual);
+    std::cout << "Threads: " << threads << "\nElapsed: " << elapsed
+              << " s\nThroughput: " << actual.count / elapsed / 1e6 << " Mproblem/s\n";
+    print_stats(std::cout, stats);
     if (!(actual == expected) || stats.accepted != total || stats.emitted != total ||
         stats.dispatched != total || stats.collected != total) {
         throw std::runtime_error("verification failed: checksum or solver statistics mismatch");

@@ -1,7 +1,7 @@
 # ホスト側のドライバーと API
 
 KV260 の Linux から `/dev/fades` を使うためのカーネルドライバー、C ioctl ABI、
-C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++ とも ABI v8 を使用する。
+C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++ とも ABI v9 を使用する。
 
 | パス | 内容 |
 | --- | --- |
@@ -39,12 +39,12 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 - 入力statusは0を設定し、HWは無視する。出力statusは0=解あり、1=解なし、2=不正セル値。
 - byte 49の上位4 bitからbyte 63までは予約領域。入力はゼロを設定しHWは無視、出力はゼロ。
 - 出力statusが0以外ならセルは全てゼロ。出力順は入力順とは限らず、IDで対応付ける。
-- HW versionは `0x46414404`。旧HWとは入力セルの位置が異なる。
+- HW versionは `0x46414405`。統計のレジスター配置は旧HWと異なる。
 - C++ の `Puzzle` は81セル、`PuzzleRecord` は64バイトの転送レコード。
 
 ## C++ ストリーミング API
 
-`host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v8 を使う。
+`host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v9 を使う。
 `try_dequeue_tx()` / `try_dequeue_rx()` は各方向のバッファー番号を返し、空なら `std::nullopt` を返す。
 `StreamDevice::batch_capacity()` は1バッファーに格納できるレコード数を返す。
 `encode(id, puzzle)` は81セルを64バイトの `PuzzleRecord` に変換する。
@@ -115,11 +115,25 @@ ID は 0 からの連番。期待値と実際の各64バイトレコード（ID�
 期待チェックサムの生成は計測外、出力の読み取りとチェックサムは計測内。
 最後の部分バッチを含め全件排出し、ハードウェアの累積件数も確認する。
 
-## 現行C I/F：ABI v8
+## 現行C I/F：ABI v9
 
 `driver/include/fades_ioctl.h` をincludeし、`/dev/fades` のioctl / mmap / pollを使う。
 現在のC ABIでは明示的に `QBUF` / `DQBUF` を行う。
 統計は `fades_solver_stats` の名前付きフィールドで取得する。
+
+統計は STREAMON で初期化され、STREAMOFF でリセットされる。取得は排出後、
+STREAMOFF 前に行う。コアとDMAは異なる時点に採取されるため、途中の件数は一致しない。
+`processing_cycles` は最初の配送からスナップショットまで継続し、排出後の待ちも含む。
+`dispatch_wait_cycles` は前処理済みの問題が配送可能だが全コアが受け入れ不能な時間。
+各コアの `core_queue_peak` は未処理問題と保留枝を含む内部dequeの最大占有数、
+`core_max_pending` は未探索の保留枝の最大数で、最大探索深さとは異なる。
+`core_branches` は分岐回数、`core_evaluated` は分岐・矛盾・解のいずれかに
+到達した状態数（矛盾による完了は1回）。全件排出後は、コアごとの
+`core_branches / core_collected` が1問あたりの平均分岐数、
+`core_busy_cycles / core_evaluated` が1状態あたりの平均busyサイクル数。
+後者はメモリー・出力待ちなども含む。分母が0なら平均は算出できない。
+`fades_benchmark` と `fades_verify` はこれらの統計と平均値を項目ごとに出力する。
+分母が0の平均値は `N/A` と表示する。
 
 ### 設定と個別mmap
 

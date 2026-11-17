@@ -24,21 +24,22 @@ static_assert(sizeof(struct fades_dma_info) == 24);
 static_assert(sizeof(struct fades_dma_config) == 16);
 static_assert(sizeof(struct fades_buffer_info) == 24);
 static_assert(sizeof(struct fades_buffer) == 16);
-static_assert(sizeof(struct fades_solver_stats) == 352);
+static_assert(sizeof(struct fades_solver_stats) == 480);
 static_assert(offsetof(struct fades_solver_stats, accepted) == 0 * 8);
 static_assert(offsetof(struct fades_solver_stats, emitted) == 1 * 8);
-static_assert(offsetof(struct fades_solver_stats, input_stall_cycles) == 2 * 8);
-static_assert(offsetof(struct fades_solver_stats, dispatched) == 3 * 8);
-static_assert(offsetof(struct fades_solver_stats, collected) == 4 * 8);
-static_assert(offsetof(struct fades_solver_stats, queue_empty_cycles) == 5 * 8);
+static_assert(offsetof(struct fades_solver_stats, dispatched) == 2 * 8);
+static_assert(offsetof(struct fades_solver_stats, collected) == 3 * 8);
+static_assert(offsetof(struct fades_solver_stats, processing_cycles) == 4 * 8);
+static_assert(offsetof(struct fades_solver_stats, dispatch_wait_cycles) == 5 * 8);
 static_assert(offsetof(struct fades_solver_stats, core_dispatched) == 6 * 8);
 static_assert(offsetof(struct fades_solver_stats, core_collected) == 12 * 8);
 static_assert(offsetof(struct fades_solver_stats, core_busy_cycles) == 18 * 8);
 static_assert(offsetof(struct fades_solver_stats, core_output_wait_cycles) == 24 * 8);
-static_assert(offsetof(struct fades_solver_stats, queue_peak) == 30 * 8);
-static_assert(offsetof(struct fades_solver_stats, processing_cycles) == 31 * 8);
-static_assert(offsetof(struct fades_solver_stats, core_input_wait_cycles) == 32 * 8);
-static_assert(offsetof(struct fades_solver_stats, core_max_inflight) == 38 * 8);
+static_assert(offsetof(struct fades_solver_stats, core_input_wait_cycles) == 30 * 8);
+static_assert(offsetof(struct fades_solver_stats, core_queue_peak) == 36 * 8);
+static_assert(offsetof(struct fades_solver_stats, core_branches) == 42 * 8);
+static_assert(offsetof(struct fades_solver_stats, core_max_pending) == 48 * 8);
+static_assert(offsetof(struct fades_solver_stats, core_evaluated) == 54 * 8);
 
 #ifndef FADES_RING_SIZE
 #define FADES_RING_SIZE 32
@@ -593,20 +594,21 @@ static long fades_ioctl(struct file *file, unsigned int cmd, unsigned long arg) 
         }
         stats.accepted = read_counter(d, 0);
         stats.emitted = read_counter(d, 1);
-        stats.input_stall_cycles = read_counter(d, 2);
-        stats.dispatched = read_counter(d, 3);
-        stats.collected = read_counter(d, 4);
-        stats.queue_empty_cycles = read_counter(d, 5);
+        stats.dispatched = read_counter(d, 2);
+        stats.collected = read_counter(d, 3);
+        stats.processing_cycles = read_counter(d, 4);
+        stats.dispatch_wait_cycles = read_counter(d, 5);
         for (unsigned int i = 0; i < ARRAY_SIZE(stats.core_dispatched); i++) {
             stats.core_dispatched[i] = read_counter(d, 6 + i);
             stats.core_collected[i] = read_counter(d, 12 + i);
             stats.core_busy_cycles[i] = read_counter(d, 18 + i);
             stats.core_output_wait_cycles[i] = read_counter(d, 24 + i);
-            stats.core_input_wait_cycles[i] = read_counter(d, 32 + i);
-            stats.core_max_inflight[i] = read_counter(d, 38 + i);
+            stats.core_input_wait_cycles[i] = read_counter(d, 30 + i);
+            stats.core_queue_peak[i] = read_counter(d, 36 + i);
+            stats.core_branches[i] = read_counter(d, 42 + i);
+            stats.core_max_pending[i] = read_counter(d, 48 + i);
+            stats.core_evaluated[i] = read_counter(d, 54 + i);
         }
-        stats.queue_peak = read_counter(d, 30);
-        stats.processing_cycles = read_counter(d, 31);
         ret = copy_to_user(user, &stats, sizeof(stats)) ? -EFAULT : 0;
         break;
     }
@@ -760,7 +762,7 @@ static int fades_probe(struct platform_device *pdev) {
         ret = PTR_ERR(d->dma);
         goto fail;
     }
-    if (readl(d->control + 20) != 0x46414404) {
+    if (readl(d->control + 20) != 0x46414405) {
         ret = -ENODEV;
         goto fail;
     }

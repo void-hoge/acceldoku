@@ -40,9 +40,12 @@ def verify(buffer, n, seen):
 
 def totals(d, total):
     s = d.stats()
-    assert all(s[i] == total for i in (0, 1, 3, 4)), s[:6]
+    assert all(s[i] == total for i in (0, 1, 2, 3)), s[:6]
     assert sum(s[6:12]) == sum(s[12:18]) == total
-    assert all(v <= 2 for v in s[38:44]), s[38:44]
+    assert all(s[48+i] <= s[36+i] for i in range(6)), s[36:54]
+    assert all(s[54+i] >= s[42+i] + s[12+i] for i in range(6)), s[42:60]
+    # This test uses only solved, immediately invalid, or contradictory inputs.
+    assert sum(s[42:48]) == 0 and sum(s[54:60]) == total, s[42:60]
 
 
 def accumulate(path, ntx, nrx):

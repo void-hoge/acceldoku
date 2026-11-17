@@ -33,18 +33,24 @@ module fades_axi #(
     // Each stream clock domain generates its own synchronous reset release.
     always @(posedge core_clk) enable_sync <= {enable_sync[0],run_enable};
     wire framing_error;
-    wire [63:0] accepted, emitted, dispatched, collected, input_stall, queue_empty;
-    wire [63:0] queue_peak, processing_cycles;
+    wire [63:0] accepted, emitted, dispatched, collected, unused_input_stall, unused_queue_empty;
+    wire [63:0] unused_queue_peak, processing_cycles;
     // Keep the six-slot counter ABI stable, padding unimplemented cores with zero.
     wire [383:0] core_dispatched, core_collected, core_busy, core_wait;
-    wire [383:0] core_input_wait, core_max_inflight;
+    wire [383:0] core_input_wait, unused_core_max_inflight;
+    wire [63:0] dispatch_wait;
+    wire [383:0] core_queue_peak, core_branches, core_max_pending, core_evaluated;
     if (CORES < 6) begin : unused_counters
         assign core_dispatched[383:CORES*64] = 0;
         assign core_collected[383:CORES*64] = 0;
         assign core_busy[383:CORES*64] = 0;
         assign core_wait[383:CORES*64] = 0;
         assign core_input_wait[383:CORES*64] = 0;
-        assign core_max_inflight[383:CORES*64] = 0;
+        assign unused_core_max_inflight[383:CORES*64] = 0;
+        assign core_queue_peak[383:CORES*64] = 0;
+        assign core_branches[383:CORES*64] = 0;
+        assign core_max_pending[383:CORES*64] = 0;
+        assign core_evaluated[383:CORES*64] = 0;
     end
 `ifndef SYNTHESIS
     initial if (CORES < 1 || CORES > 6) $fatal(1, "CORES must be between 1 and 6");
@@ -58,18 +64,21 @@ module fades_axi #(
         .m_axis_tvalid(m_axis_tvalid), .m_axis_tlast(m_axis_tlast), .m_axis_tready(m_axis_tready),
         .framing_error(framing_error), .accepted_count(accepted), .output_count(emitted),
         .dispatch_count(dispatched), .collected_count(collected),
-        .input_stall_cycles(input_stall), .queue_empty_cycles(queue_empty),
-        .queue_peak(queue_peak), .processing_cycles(processing_cycles),
+        .input_stall_cycles(unused_input_stall), .queue_empty_cycles(unused_queue_empty),
+        .queue_peak(unused_queue_peak), .processing_cycles(processing_cycles),
         .core_dispatch_counts(core_dispatched[CORES*64-1:0]), .core_result_counts(core_collected[CORES*64-1:0]),
         .core_busy_cycles(core_busy[CORES*64-1:0]), .core_output_wait_cycles(core_wait[CORES*64-1:0]),
-        .core_input_wait_cycles(core_input_wait[CORES*64-1:0]), .core_max_inflight(core_max_inflight[CORES*64-1:0])
+        .core_input_wait_cycles(core_input_wait[CORES*64-1:0]), .core_max_inflight(unused_core_max_inflight[CORES*64-1:0]),
+        .dispatch_wait_cycles(dispatch_wait), .core_queue_peak(core_queue_peak[CORES*64-1:0]),
+        .core_branches(core_branches[CORES*64-1:0]), .core_max_pending(core_max_pending[CORES*64-1:0]),
+        .core_evaluated(core_evaluated[CORES*64-1:0])
     );
     // Snapshot handshake. Core bundle is held until a new request; ack takes
     // two DMA clocks to cross before the bundle is captured by the DMA side.
     logic snapshot_req, snapshot_ack;
     (* ASYNC_REG = "TRUE" *) logic [1:0] req_sync, ack_sync;
-    logic [2559:0] core_snapshot;
-    logic [2815:0] snapshot;
+    logic [3711:0] core_snapshot;
+    logic [3839:0] snapshot;
     logic snapshot_pending;
     (* ASYNC_REG = "TRUE" *) logic [2:0] board_core_reset_sync = 3'b111;
     always @(posedge core_clk or negedge aresetn) begin
@@ -81,7 +90,7 @@ module fades_axi #(
         else begin
             req_sync <= {req_sync[0],snapshot_req};
             if (req_sync[1] != snapshot_ack) begin
-                core_snapshot <= {core_max_inflight,core_input_wait,processing_cycles,core_wait,core_busy,core_collected,core_dispatched,queue_empty,collected,dispatched};
+                core_snapshot <= {core_evaluated,core_max_pending,core_branches,core_queue_peak,core_input_wait,core_wait,core_busy,core_collected,core_dispatched,dispatch_wait,processing_cycles,collected,dispatched};
                 snapshot_ack <= req_sync[1];
             end
         end
@@ -107,7 +116,7 @@ module fades_axi #(
             if (soft_reset) submitted_records <= 0;
             ack_sync <= {ack_sync[0],snapshot_ack};
             if (snapshot_pending && ack_sync[1] == snapshot_req) begin
-                snapshot <= {core_snapshot[2559:1728],queue_peak,core_snapshot[1727:0],input_stall,emitted,accepted};
+                snapshot <= {core_snapshot,emitted,accepted};
                 snapshot_pending <= 0;
             end
             if (s_axi_awvalid && s_axi_awready) begin aw_pending <= 1; awaddr <= s_axi_awaddr; end
@@ -131,11 +140,11 @@ module fades_axi #(
                     12'h004: s_axi_rdata <= slot_records;
                     12'h008: s_axi_rdata <= submitted_records[31:0];
                     12'h00c: s_axi_rdata <= {30'b0,snapshot_pending,framing_error};
-                    12'h014: s_axi_rdata <= 32'h46414404;
+                    12'h014: s_axi_rdata <= 32'h46414405;
                     12'h018: s_axi_rdata <= submitted_records[63:32];
                     default: begin
                         s_axi_rdata <= 0;
-                        if(s_axi_araddr >= 12'h100 && s_axi_araddr < 12'h260 && s_axi_araddr[1:0] == 0)
+                        if(s_axi_araddr >= 12'h100 && s_axi_araddr < 12'h2e0 && s_axi_araddr[1:0] == 0)
                             s_axi_rdata <= snapshot[32*((int'(s_axi_araddr)-256)/4) +: 32];
                     end
                 endcase

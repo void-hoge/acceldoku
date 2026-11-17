@@ -1,3 +1,4 @@
+#include "../stats.hpp"
 #include <fades/stream_device.hpp>
 
 #include <algorithm>
@@ -118,8 +119,10 @@ int main(int argc, char **argv) try {
         throw std::runtime_error("solver statistics mismatch");
     }
     device.stream_off();
-    std::cout << "TX/RX=" << tx << '/' << rx << ", " << received << " records, " << elapsed
-              << " s, " << received / elapsed / 1e6 << " Mproblem/s\n";
+    std::cout << "TX buffers: " << tx << "\nRX buffers: " << rx << "\nRecords: " << received
+              << "\nElapsed: " << elapsed << " s\nThroughput: " << received / elapsed / 1e6
+              << " Mproblem/s\n";
+    print_stats(std::cout, stats);
     return 0;
 } catch (const std::exception &e) {
 

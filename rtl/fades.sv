@@ -32,7 +32,10 @@ module fades #(
     output logic [CORES*64-1:0] core_result_counts,
     output logic [CORES*64-1:0] core_busy_cycles,
     output logic [CORES*64-1:0] core_output_wait_cycles,
-    output logic [CORES*64-1:0] core_input_wait_cycles, core_max_inflight
+    output logic [CORES*64-1:0] core_input_wait_cycles, core_max_inflight,
+    output logic [63:0] dispatch_wait_cycles,
+    output logic [CORES*64-1:0] core_queue_peak, core_branches,
+    output logic [CORES*64-1:0] core_max_pending, core_evaluated
 );
     localparam integer CW = (CORES > 1) ? $clog2(CORES) : 1;
     localparam integer IW = $clog2(INFLIGHT_LIMIT+1);
@@ -100,6 +103,8 @@ module fades #(
     );
     wire [CORES-1:0] core_ready, result_valid, result_solved, core_busy, output_wait;
     wire [728:0] result_candidates [0:CORES-1];
+    wire [10:0] core_queued [0:CORES-1], core_pending [0:CORES-1];
+    wire [CORES-1:0] branch_event, contradiction_event, finish_event;
     logic [CORES-1:0] core_valid, result_ready;
     logic [IW-1:0] inflight [0:CORES-1];
     logic [IP-1:0] id_head [0:CORES-1], id_tail [0:CORES-1];
@@ -156,10 +161,10 @@ module fades #(
             .input_valid(core_valid[g]), .input_ready(core_ready[g]),
             .input_candidates(candidates), .result_valid(result_valid[g]),
             .result_ready(result_ready[g]), .result_solved(result_solved[g]),
-            .result_candidates(result_candidates[g]), .queued(), .pending_branches(),
-            .busy(core_busy[g]), .event_infer(), .event_branch(), .event_load(),
+            .result_candidates(result_candidates[g]), .queued(core_queued[g]), .pending_branches(core_pending[g]),
+            .busy(core_busy[g]), .event_infer(), .event_branch(branch_event[g]), .event_load(),
             .event_memory_wait(), .event_output_wait(output_wait[g]),
-            .event_contradiction(), .event_finish(), .event_skip(), .event_wasted_infer()
+            .event_contradiction(contradiction_event[g]), .event_finish(finish_event[g]), .event_skip(), .event_wasted_infer()
         );
         /* verilator lint_on PINCONNECTEMPTY */
         wire push = dispatch && selected == g;
@@ -173,6 +178,10 @@ module fades #(
                 core_output_wait_cycles[64*g +: 64] <= 0;
                 core_input_wait_cycles[64*g +: 64] <= 0;
                 core_max_inflight[64*g +: 64] <= 0;
+                core_queue_peak[64*g +: 64] <= 0;
+                core_branches[64*g +: 64] <= 0;
+                core_max_pending[64*g +: 64] <= 0;
+                core_evaluated[64*g +: 64] <= 0;
             end else begin
                 inflight[g] <= inflight[g] + IW'(push) - IW'(pop);
                 if (push) begin
@@ -190,6 +199,13 @@ module fades #(
                     core_input_wait_cycles[64*g +: 64] <= core_input_wait_cycles[64*g +: 64]+1'b1;
                 if (64'(inflight[g]) > core_max_inflight[64*g +: 64])
                     core_max_inflight[64*g +: 64] <= 64'(inflight[g]);
+                if (64'(core_queued[g]) > core_queue_peak[64*g +: 64])
+                    core_queue_peak[64*g +: 64] <= 64'(core_queued[g]);
+                if (64'(core_pending[g]) > core_max_pending[64*g +: 64])
+                    core_max_pending[64*g +: 64] <= 64'(core_pending[g]);
+                if (branch_event[g]) core_branches[64*g +: 64] <= core_branches[64*g +: 64] + 1'b1;
+                if (branch_event[g] || contradiction_event[g] || finish_event[g])
+                    core_evaluated[64*g +: 64] <= core_evaluated[64*g +: 64] + 1'b1;
             end
         end
     end
@@ -200,12 +216,14 @@ module fades #(
             result_buffer <= 0; result_buffer_valid <= 0;
             dispatch_count <= 0; collected_count <= 0; queue_empty_cycles <= 0;
             processing_cycles <= 0; work_started <= 0;
+            dispatch_wait_cycles <= 0;
         end else begin
             if (work_started || dispatch) begin
                 work_started <= 1;
                 processing_cycles <= processing_cycles+1'b1;
             end
             if (!queue_valid) queue_empty_cycles <= queue_empty_cycles + 1'b1;
+            if (problem_valid && !problem_ready) dispatch_wait_cycles <= dispatch_wait_cycles + 1'b1;
             if (dispatch) begin
                 rr_head <= selected == CORES-1 ? 0 : CW'(selected+1);
                 dispatch_count <= dispatch_count + 1'b1;
