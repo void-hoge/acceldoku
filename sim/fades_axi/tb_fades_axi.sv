@@ -52,7 +52,7 @@ module tb_fades_axi;
     initial begin
         repeat(20)@(negedge dma_clk);aresetn=1;
         read_reg(0,value);if(value!==1)$fatal(1,"Reset default");
-        read_reg(20,value);if(value!==32'h46414404)$fatal(1,"Version");
+        read_reg(20,value);if(value!==32'h46414405)$fatal(1,"Version");
         write_reg(0,2,2,1);
         read_reg(0,value);if(value!==1)$fatal(1,"Control byte strobe");
         write_reg(4,10000,15,0);
@@ -71,17 +71,34 @@ module tb_fades_axi;
         write_reg(16,1,1,1);
         repeat(20)@(negedge dma_clk);
         read_reg(12,value);if(value[1:0]!==0)$fatal(1,"Snapshot did not complete");
-        read_reg(12'h128,value);if(value==0)$fatal(1,"Core snapshot did not cross");
+        read_reg(12'h1f0,value);if(value==0)$fatal(1,"Core snapshot did not cross");
         read_reg(12'h100,value);if(value!==0)$fatal(1,"Spurious input count");
         // Idle enabled cores accumulate input wait; unimplemented ABI slots stay zero.
-        read_reg(12'h200,value);if(value==0)$fatal(1,"Active core input wait missing");
-        for(group_index=0;group_index<6;group_index=group_index+1)
+        read_reg(12'h1f0,value);if(value==0)$fatal(1,"Active core input wait missing");
+        for(group_index=0;group_index<9;group_index=group_index+1)
             for(slot=CORES;slot<6;slot=slot+1) begin
-                read_reg(12'(256+8*((group_index<4 ? 6+6*group_index : 32+6*(group_index-4))+slot)),value);
+                read_reg(12'(256+8*(6+6*group_index+slot)),value);
                 if(value!==0)$fatal(1,"Unimplemented core counter nonzero");
-                read_reg(12'(260+8*((group_index<4 ? 6+6*group_index : 32+6*(group_index-4))+slot)),value);
+                read_reg(12'(260+8*(6+6*group_index+slot)),value);
                 if(value!==0)$fatal(1,"Unimplemented core counter high word nonzero");
             end
+        // Independently drive one branch, one contradiction, and one final
+        // contradiction (also finish); the last must count exactly once.
+        @(negedge core_clk);
+        force dut.stream.branch_event = 1;
+        @(negedge core_clk);
+        force dut.stream.branch_event = 0;
+        force dut.stream.contradiction_event = 1;
+        @(negedge core_clk);
+        force dut.stream.finish_event = 1;
+        @(negedge core_clk);
+        release dut.stream.branch_event;
+        release dut.stream.contradiction_event;
+        release dut.stream.finish_event;
+        write_reg(16,1,1,1);
+        repeat(20)@(negedge dma_clk);
+        read_reg(12'h250,value);if(value!==1)$fatal(1,"Branch counter");
+        read_reg(12'h2b0,value);if(value!==3)$fatal(1,"Evaluated state counter");
         write_reg(0,1,1,1);
         read_reg(0,value);if(value!==1)$fatal(1,"Soft reset");
         read_reg(8,value);if(value!==0)$fatal(1,"Credit reset");

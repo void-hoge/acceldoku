@@ -5,7 +5,7 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define FADES_DMA_ABI_VERSION 8              ///< ABI version checked by the driver and userspace.
+#define FADES_DMA_ABI_VERSION 9              ///< ABI version checked by the driver and userspace.
 #define FADES_DMA_MAX_BUFFERS 4096U          ///< Maximum number of buffers per direction.
 #define FADES_DMA_SLOT_BYTES (1024U * 1024U) ///< Data area and mmap size of one buffer in bytes.
 #define FADES_RECORDS_PER_SLOT                                                                     \
@@ -78,19 +78,19 @@ struct fades_buffer {
 struct fades_solver_stats {
     __aligned_u64 accepted;                   ///< Input records accepted by hardware.
     __aligned_u64 emitted;                    ///< Output records emitted by hardware.
-    __aligned_u64 input_stall_cycles;         ///< DMA clock cycles stalled on input.
     __aligned_u64 dispatched;                 ///< Records dispatched to cores.
     __aligned_u64 collected;                  ///< Records collected from cores.
-    __aligned_u64 queue_empty_cycles;         ///< Core clock cycles with an empty input queue.
+    __aligned_u64 processing_cycles;          ///< Core cycles since first dispatch until snapshot.
+    __aligned_u64 dispatch_wait_cycles;        ///< Cycles with a preprocessed problem awaiting a core.
     __aligned_u64 core_dispatched[6];         ///< Records dispatched per hardware core.
     __aligned_u64 core_collected[6];          ///< Records collected per core.
     __aligned_u64 core_busy_cycles[6];        ///< Busy cycles per core.
     __aligned_u64 core_output_wait_cycles[6]; ///< Output wait cycles per core.
-    __aligned_u64 queue_peak;        ///< Peak record occupancy observed at the input queue writer.
-    __aligned_u64 processing_cycles; ///< Core clock cycles from first dispatch to sampling.
-    __aligned_u64
-        core_input_wait_cycles[6];      ///< Cycles per core enabled, idle and without requests.
-    __aligned_u64 core_max_inflight[6]; ///< Maximum in-flight requests per core.
+    __aligned_u64 core_input_wait_cycles[6]; ///< Cycles per core enabled, idle and without requests.
+    __aligned_u64 core_queue_peak[6];        ///< Peak deque occupancy including pending branches.
+    __aligned_u64 core_branches[6];          ///< Branch decisions per core.
+    __aligned_u64 core_max_pending[6];       ///< Peak number of pending DFS siblings, not search depth.
+    __aligned_u64 core_evaluated[6];         ///< States ending in a branch, contradiction or solution.
 };
 
 #define FADESIOC_DMA_INFO _IOR('F', 0, struct fades_dma_info)

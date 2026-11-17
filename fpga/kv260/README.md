@@ -140,7 +140,7 @@ python3 host/tests/check_stream.py
 `xmutil` の終了値に加え、listapps、デバイスの存在、機能試験でロードを確認する。
 デバイスが出ない場合や転送異常時は root で `dmesg` を確認する。
 転送中断・タイムアウト時は、プロセスを終了してモジュールと FPGA アプリを再ロードする。
-ABI v8 は面数設定・個別mmap後、STREAMONで容量16,384問を設定して初期化し、継続処理する。
+ABI v9 は面数設定・個別mmap後、STREAMONで容量16,384問を設定して初期化し、継続処理する。
 出力は N 件または登録済みの処理がすべて完了した端数で区切る。
 通常の DMA packet の TLAST でキューやコアをリセットしない。
 STREAMOFF で両 DMA と全 solver/FIFO を reset してから再開始できる。
@@ -177,9 +177,9 @@ U-BootでIOPLLを1.5 GHzにする試行では115.385 / 187.5 MHzで機能試験�
 |0x008|投入登録件数を加算。送信待ちを含め、TX開始前に通知。読み出しは累積件数の下位32bit|
 |0x00c|bit0 sticky framing error、bit1 snapshot pending|
 |0x010|bit0=1書き込みでcounter snapshotを要求|
-|0x014|identity `0x46414404`（入出力共通のID / status / cells / reserve形式）|
+|0x014|identity `0x46414405`（統計レジスター配置 v9）|
 |0x018|投入登録累積件数の上位32bit|
-|0x100〜0x25f|44個の64-bit counter、下位32bitが先|
+|0x100〜0x2df|60個の64-bit counter、下位32bitが先|
 
 counter順は `host/driver/include/fades_ioctl.h` のコメントを参照。
 クロックの異なるcounterはhandshakeで保持・採取し、全件排出後に件数を照合する。
