@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-#ifndef FADES_IOCTL_H
-#define FADES_IOCTL_H
+#ifndef ACCELDOKU_IOCTL_H
+#define ACCELDOKU_IOCTL_H
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define FADES_DMA_ABI_VERSION 9              ///< ABI version checked by the driver and userspace.
-#define FADES_DMA_MAX_BUFFERS 4096U          ///< Maximum number of buffers per direction.
-#define FADES_DMA_SLOT_BYTES (1024U * 1024U) ///< Data area and mmap size of one buffer in bytes.
-#define FADES_RECORDS_PER_SLOT                                                                     \
-    (FADES_DMA_SLOT_BYTES / 64U) ///< Number of 64-byte records per buffer.
+#define ACCELDOKU_DMA_ABI_VERSION 9              ///< ABI version checked by the driver and userspace.
+#define ACCELDOKU_DMA_MAX_BUFFERS 4096U          ///< Maximum number of buffers per direction.
+#define ACCELDOKU_DMA_SLOT_BYTES (1024U * 1024U) ///< Data area and mmap size of one buffer in bytes.
+#define ACCELDOKU_RECORDS_PER_SLOT                                                                     \
+    (ACCELDOKU_DMA_SLOT_BYTES / 64U) ///< Number of 64-byte records per buffer.
 
 /**
  * @brief Driver ABI and buffer configuration information.
@@ -17,7 +17,7 @@
  * buffer counts are populated after CONFIG succeeds. Userspace must check abi_version
  * and slot_bytes before accessing buffers.
  */
-struct fades_dma_info {
+struct acceldoku_dma_info {
     __u32 abi_version; ///< Output: ABI version provided by the driver.
     __u32 slot_bytes;  ///< Output: Size of each buffer in bytes.
     __u32 max_buffers; ///< Output: Limit per queue; allocations below this limit may still fail.
@@ -32,9 +32,9 @@ struct fades_dma_info {
  * by the CPU. Configuration can succeed only once per open. Allocation failures are
  * rolled back, allowing a retry on the same fd.
  */
-struct fades_dma_config {
-    __u32 tx_buffers;  ///< Input: TX buffer count (1..FADES_DMA_MAX_BUFFERS).
-    __u32 rx_buffers;  ///< Input: RX buffer count (1..FADES_DMA_MAX_BUFFERS).
+struct acceldoku_dma_config {
+    __u32 tx_buffers;  ///< Input: TX buffer count (1..ACCELDOKU_DMA_MAX_BUFFERS).
+    __u32 rx_buffers;  ///< Input: RX buffer count (1..ACCELDOKU_DMA_MAX_BUFFERS).
     __u32 reserved[2]; ///< Input: Reserved; set all elements to 0.
 };
 
@@ -44,16 +44,16 @@ struct fades_dma_config {
  * is not a physical or DMA address. Use MAP_SHARED to mmap exactly map_bytes bytes
  * at that offset. Querying a buffer does not change its ownership.
  */
-struct fades_buffer_info {
-    __u32 queue;               ///< Input: TX or RX, selected using enum fades_queue.
+struct acceldoku_buffer_info {
+    __u32 queue;               ///< Input: TX or RX, selected using enum acceldoku_queue.
     __u32 index;               ///< Input: Buffer index in the selected queue (0..count-1).
     __aligned_u64 mmap_offset; ///< Output: Opaque byte offset for mmap.
     __aligned_u64 map_bytes;   ///< Output: Exact byte count for mmap with MAP_SHARED.
 };
 
-enum fades_queue {
-    FADES_QUEUE_TX = 0, ///< Userspace writes input for DMA to read; completion uses POLLOUT.
-    FADES_QUEUE_RX = 1, ///< DMA writes results for userspace to collect; completion uses POLLIN.
+enum acceldoku_queue {
+    ACCELDOKU_QUEUE_TX = 0, ///< Userspace writes input for DMA to read; completion uses POLLOUT.
+    ACCELDOKU_QUEUE_RX = 1, ///< DMA writes results for userspace to collect; completion uses POLLIN.
 };
 
 /**
@@ -62,8 +62,8 @@ enum fades_queue {
  * buffer to DMA; DQBUF returns a completed buffer's index and actual record count and
  * transfers ownership back to the CPU. TX completion is independent of solver completion.
  */
-struct fades_buffer {
-    __u32 queue;    ///< Input: QBUF/DQBUF direction, using enum fades_queue.
+struct acceldoku_buffer {
+    __u32 queue;    ///< Input: QBUF/DQBUF direction, using enum acceldoku_queue.
     __u32 index;    ///< QBUF input: Buffer to submit. DQBUF output: Buffer returned.
     __u32 records;  ///< QBUF input: 1..16384 for TX, 0 for RX. DQBUF output: Actual count.
     __u32 reserved; ///< Input: Reserved; must be 0.
@@ -75,7 +75,7 @@ struct fades_buffer {
  * times, so stage totals match only after all records are drained. Per-core array
  * indices identify hardware cores.
  */
-struct fades_solver_stats {
+struct acceldoku_solver_stats {
     __aligned_u64 accepted;             ///< Input records accepted by hardware.
     __aligned_u64 emitted;              ///< Output records emitted by hardware.
     __aligned_u64 dispatched;           ///< Records dispatched to cores.
@@ -94,13 +94,13 @@ struct fades_solver_stats {
     __aligned_u64 core_evaluated[6];   ///< States ending in a branch, contradiction or solution.
 };
 
-#define FADESIOC_DMA_INFO _IOR('F', 0, struct fades_dma_info)
-#define FADESIOC_SOLVER_STATS _IOR('F', 2, struct fades_solver_stats)
-#define FADESIOC_QBUF _IOW('F', 3, struct fades_buffer)
-#define FADESIOC_DQBUF _IOWR('F', 4, struct fades_buffer)
-#define FADESIOC_STREAMON _IO('F', 5)
-#define FADESIOC_STREAMOFF _IO('F', 6)
-#define FADESIOC_DMA_CONFIG _IOW('F', 8, struct fades_dma_config)
-#define FADESIOC_QUERYBUF _IOWR('F', 9, struct fades_buffer_info)
+#define ACCELDOKUIOC_DMA_INFO _IOR('F', 0, struct acceldoku_dma_info)
+#define ACCELDOKUIOC_SOLVER_STATS _IOR('F', 2, struct acceldoku_solver_stats)
+#define ACCELDOKUIOC_QBUF _IOW('F', 3, struct acceldoku_buffer)
+#define ACCELDOKUIOC_DQBUF _IOWR('F', 4, struct acceldoku_buffer)
+#define ACCELDOKUIOC_STREAMON _IO('F', 5)
+#define ACCELDOKUIOC_STREAMOFF _IO('F', 6)
+#define ACCELDOKUIOC_DMA_CONFIG _IOW('F', 8, struct acceldoku_dma_config)
+#define ACCELDOKUIOC_QUERYBUF _IOWR('F', 9, struct acceldoku_buffer_info)
 
 #endif

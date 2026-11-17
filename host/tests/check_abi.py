@@ -6,13 +6,13 @@ import mmap
 import os
 import sys
 
-from fades_device import (BASE, BUF, CONFIG, CONFIG_CMD, DQBUF, INFO_CMD,
+from acceldoku_device import (BASE, BUF, CONFIG, CONFIG_CMD, DQBUF, INFO_CMD,
                           OFF, ON, QBUF, QUERY, QUERY_CMD, STRIDE,
                           expect_errno, info, query)
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "/dev/fades"
+    path = sys.argv[1] if len(sys.argv) > 1 else "/dev/acceldoku"
     fd = os.open(path, os.O_RDWR | os.O_CLOEXEC)
     maps = []
     try:

@@ -1,14 +1,14 @@
 # ホスト側のドライバーと API
 
-KV260 の Linux から `/dev/fades` を使うためのカーネルドライバー、C ioctl ABI、
+KV260 の Linux から `/dev/acceldoku` を使うためのカーネルドライバー、C ioctl ABI、
 C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++ とも ABI v9 を使用する。
 
 | パス | 内容 |
 | --- | --- |
-| `driver/include/fades_ioctl.h` | ioctl ABI の宣言 |
-| `driver/src/fades.c` | DMA・バッファー・制御を扱うカーネルモジュール |
-| `lib/include/fades/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
-| `tools/fades_run.c` | ioctl を直接使う C ベンチマーク |
+| `driver/include/acceldoku_ioctl.h` | ioctl ABI の宣言 |
+| `driver/src/acceldoku.c` | DMA・バッファー・制御を扱うカーネルモジュール |
+| `lib/include/acceldoku/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
+| `tools/acceldoku_run.c` | ioctl を直接使う C ベンチマーク |
 | `tools/cpp/benchmark/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
 | `tools/cpp/verify/` | fastdoku と出力チェックサムを比較する固定件数検証 |
 | `tests/` | ABI、ストリーム、停止通知、C++ API の実機試験 |
@@ -44,7 +44,7 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 
 ## C++ ストリーミング API
 
-`host/lib/include/fades/stream_device.hpp` の `fades::StreamDevice` は ioctl ABI v9 を使う。
+`host/lib/include/acceldoku/stream_device.hpp` の `acceldoku::StreamDevice` は ioctl ABI v9 を使う。
 `try_dequeue_tx()` / `try_dequeue_rx()` は各方向のバッファー番号を返し、空なら `std::nullopt` を返す。
 `StreamDevice::batch_capacity()` は1バッファーに格納できるレコード数を返す。
 `encode(id, puzzle)` は81セルを64バイトの `PuzzleRecord` に変換する。
@@ -83,9 +83,9 @@ if (auto rx = device.try_dequeue_rx()) {
 ```
 
 ```sh
-cmake -S . -B build/cpp -DFADES_BUILD_CPP=ON
-cmake --build build/cpp --target fades_benchmark
-build/cpp/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+cmake -S . -B build/cpp -DACCELDOKU_BUILD_CPP=ON
+cmake --build build/cpp --target acceldoku_benchmark
+build/cpp/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 ```
 
 入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
@@ -95,12 +95,12 @@ build/cpp/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
 ### 固定件数の検証
 
 Rust の Cargo と fastdoku サブモジュールが必要。検証機向けにビルド済みの
-`libfades_fastdoku_ffi.a` がある場合は `-DFADES_FASTDOKU_ARCHIVE=/絶対パス` も指定できる。
+`libacceldoku_fastdoku_ffi.a` がある場合は `-DACCELDOKU_FASTDOKU_ARCHIVE=/絶対パス` も指定できる。
 
 ```sh
-cmake -S . -B build/verify -DFADES_BUILD_VERIFY=ON
-cmake --build build/verify --target fades_verify
-build/verify/host/tools/cpp/fades_verify sim/data/17puz49158.txt
+cmake -S . -B build/verify -DACCELDOKU_BUILD_VERIFY=ON
+cmake --build build/verify --target acceldoku_verify
+build/verify/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
 ```
 
 入力ファイルの空行以外の全問題を一度ずつ投入する。TX/RX バッファー数は各 4、
@@ -117,9 +117,9 @@ ID は 0 からの連番。期待値と実際の各64バイトレコード（ID�
 
 ## 現行C I/F：ABI v9
 
-`driver/include/fades_ioctl.h` をincludeし、`/dev/fades` のioctl / mmap / pollを使う。
+`driver/include/acceldoku_ioctl.h` をincludeし、`/dev/acceldoku` のioctl / mmap / pollを使う。
 現在のC ABIでは明示的に `QBUF` / `DQBUF` を行う。
-統計は `fades_solver_stats` の名前付きフィールドで取得する。
+統計は `acceldoku_solver_stats` の名前付きフィールドで取得する。
 
 統計は STREAMON で初期化され、STREAMOFF でリセットされる。取得は排出後、
 STREAMOFF 前に行う。コアとDMAは異なる時点に採取されるため、途中の件数は一致しない。
@@ -132,17 +132,17 @@ STREAMOFF 前に行う。コアとDMAは異なる時点に採取されるため�
 `core_branches / core_collected` が1問あたりの平均分岐数、
 `core_busy_cycles / core_evaluated` が1状態あたりの平均busyサイクル数。
 後者はメモリー・出力待ちなども含む。分母が0なら平均は算出できない。
-`fades_benchmark` と `fades_verify` はこれらの統計と平均値を項目ごとに出力する。
+`acceldoku_benchmark` と `acceldoku_verify` はこれらの統計と平均値を項目ごとに出力する。
 分母が0の平均値は `N/A` と表示する。
 
 ### 設定と個別mmap
 
 ```c
-struct fades_dma_config cfg = {.tx_buffers = 8, .rx_buffers = 64};
-ioctl(fd, FADESIOC_DMA_CONFIG, &cfg);
+struct acceldoku_dma_config cfg = {.tx_buffers = 8, .rx_buffers = 64};
+ioctl(fd, ACCELDOKUIOC_DMA_CONFIG, &cfg);
 
-struct fades_buffer_info b = {.queue = FADES_QUEUE_TX, .index = 3};
-ioctl(fd, FADESIOC_QUERYBUF, &b);
+struct acceldoku_buffer_info b = {.queue = ACCELDOKU_QUEUE_TX, .index = 3};
+ioctl(fd, ACCELDOKUIOC_QUERYBUF, &b);
 void *tx3 = mmap(NULL, b.map_bytes, PROT_READ | PROT_WRITE,
                  MAP_SHARED, fd, (off_t)b.mmap_offset);
 ```
@@ -217,36 +217,36 @@ cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-`build/kv260-ps/host/driver/src/fades.ko`、Cツール
-`build/kv260-ps/host/tools/fades_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/fades_benchmark` が生成される。
+`build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
+`build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` が生成される。
 C++のみなら `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
 
-以下は `/dev/fades` を利用できる状態で実行する。Cツールの入力は上記の64バイト
+以下は `/dev/acceldoku` を利用できる状態で実行する。Cツールの入力は上記の64バイト
 レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、
 結果は内容を読まず件数のみ集計する。
 
 ```sh
 # 連続投入：入力集合を反復コピーし、一意IDを付与。出力内容は読まず件数だけ数える。
 # 開始後の入力コピー、投入・回収、RX返却、DMA/求解、最終排出を計測に含む。
-build/kv260-ps/host/tools/fades_run input.raw 8 64 10
-build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+build/kv260-ps/host/tools/acceldoku_run input.raw 8 64 10
+build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 
 python3 host/tests/check_abi.py
 python3 host/tests/check_poll_stop.py
 python3 host/tests/check_stream.py --tx 1 --rx 1
 python3 host/tests/check_stream.py --tx 8 --rx 64
 python3 host/tests/check_stream.py --tx 65 --rx 65
-python3 host/tests/check_example.py build/kv260-ps/host/tools/fades_run \
+python3 host/tests/check_example.py build/kv260-ps/host/tools/acceldoku_run \
     --corpus sim/data/17puz49158.txt --seconds 5 --repeat 3
 
 # C++ API の変換・所有権・停止再開を実機で確認
 c++ -std=c++20 -O2 -D_FILE_OFFSET_BITS=64 \
     -Ihost/lib/include -Ihost/driver/include \
-    host/lib/src/stream_device.cpp host/tests/cpp_smoke.cpp -o /tmp/fades_cpp_smoke
-/tmp/fades_cpp_smoke
+    host/lib/src/stream_device.cpp host/tests/cpp_smoke.cpp -o /tmp/acceldoku_cpp_smoke
+/tmp/acceldoku_cpp_smoke
 ```
 
 連続投入の計測はセットアップ・ファイル読み込み・初回の入力コピーと投入・出力内容の検証を含まない。
 アプリは現行ヘッダーでビルドする。v7からは `STREAMOFF` のioctl番号とABI番号が変更され、
-ioctlマクロは `FADESIOC_*` に改名された。
+ioctlマクロは `ACCELDOKUIOC_*` に改名された。

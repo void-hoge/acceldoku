@@ -1,11 +1,11 @@
 #pragma once
 
-#include <fades/stream_device.hpp>
+#include <acceldoku/stream_device.hpp>
 
 #include <iterator>
 #include <ostream>
 
-inline void print_stats(std::ostream &out, const fades::SolverStats &stats) {
+inline void print_stats(std::ostream &out, const acceldoku::SolverStats &stats) {
     out << "HW statistics:\n"
         << "  accepted: " << stats.accepted << '\n'
         << "  dispatched: " << stats.dispatched << '\n'

@@ -7,7 +7,7 @@ import select
 import struct
 import time
 
-from fades_device import BASE, Device, RECORDS, STRIDE, expect_errno
+from acceldoku_device import BASE, Device, RECORDS, STRIDE, expect_errno
 
 DIGITS = "534678912672195348198342567859761423426853791713924856961537284287419635345286179"
 CELLS = sum(int(d) << (4 * i) for i, d in enumerate(DIGITS))
@@ -230,7 +230,7 @@ def stream(path, ntx, nrx):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("device", nargs="?", default="/dev/fades")
+    parser.add_argument("device", nargs="?", default="/dev/acceldoku")
     parser.add_argument("--tx", type=int, default=8)
     parser.add_argument("--rx", type=int, default=8)
     args = parser.parse_args()

@@ -20,7 +20,7 @@
 #ifdef __aarch64__
 #include <arm_neon.h>
 #endif
-#include "fades_ioctl.h"
+#include "acceldoku_ioctl.h"
 
 /**
  * @brief Device fd and per-direction buffer mappings used by the tool.
@@ -28,7 +28,7 @@
  * and buffer number. At shutdown, STREAMOFF is followed by releasing all mappings and
  * arrays and closing the fd.
  */
-struct fades_device {
+struct acceldoku_device {
     int fd;
     unsigned buffer_counts[2];
     uint8_t **mapped_buffers[2];
@@ -49,8 +49,8 @@ static unsigned number(const char *text) {
     char *end;
     errno = 0;
     unsigned long count = strtoul(text, &end, 10);
-    if (errno || !*text || *end || !count || count > FADES_DMA_MAX_BUFFERS) {
-        fprintf(stderr, "Buffer count must be 1..%u\n", FADES_DMA_MAX_BUFFERS);
+    if (errno || !*text || *end || !count || count > ACCELDOKU_DMA_MAX_BUFFERS) {
+        fprintf(stderr, "Buffer count must be 1..%u\n", ACCELDOKU_DMA_MAX_BUFFERS);
         exit(EXIT_FAILURE);
     }
     return (unsigned)count;
@@ -64,35 +64,35 @@ static double now(void) {
     return (double)timestamp.tv_sec + (double)timestamp.tv_nsec * 1e-9;
 }
 
-static void setup(struct fades_device *device) {
-    device->fd = open("/dev/fades", O_RDWR | O_CLOEXEC);
+static void setup(struct acceldoku_device *device) {
+    device->fd = open("/dev/acceldoku", O_RDWR | O_CLOEXEC);
     if (device->fd < 0) {
-        fail("open /dev/fades");
+        fail("open /dev/acceldoku");
     }
-    struct fades_dma_info info = {0};
-    if (ioctl(device->fd, FADESIOC_DMA_INFO, &info) < 0) {
+    struct acceldoku_dma_info info = {0};
+    if (ioctl(device->fd, ACCELDOKUIOC_DMA_INFO, &info) < 0) {
         fail("DMA_INFO");
     }
-    if (info.abi_version != FADES_DMA_ABI_VERSION || info.slot_bytes != FADES_DMA_SLOT_BYTES) {
-        fprintf(stderr, "Incompatible FADES ABI\n");
+    if (info.abi_version != ACCELDOKU_DMA_ABI_VERSION || info.slot_bytes != ACCELDOKU_DMA_SLOT_BYTES) {
+        fprintf(stderr, "Incompatible ACCELDOKU ABI\n");
         exit(EXIT_FAILURE);
     }
-    struct fades_dma_config cfg = {
-        .tx_buffers = device->buffer_counts[FADES_QUEUE_TX],
-        .rx_buffers = device->buffer_counts[FADES_QUEUE_RX],
+    struct acceldoku_dma_config cfg = {
+        .tx_buffers = device->buffer_counts[ACCELDOKU_QUEUE_TX],
+        .rx_buffers = device->buffer_counts[ACCELDOKU_QUEUE_RX],
     };
-    if (ioctl(device->fd, FADESIOC_DMA_CONFIG, &cfg) < 0) {
+    if (ioctl(device->fd, ACCELDOKUIOC_DMA_CONFIG, &cfg) < 0) {
         fail("DMA_CONFIG");
     }
-    for (enum fades_queue direction = FADES_QUEUE_TX; direction <= FADES_QUEUE_RX; direction++) {
+    for (enum acceldoku_queue direction = ACCELDOKU_QUEUE_TX; direction <= ACCELDOKU_QUEUE_RX; direction++) {
         device->mapped_buffers[direction] =
             calloc(device->buffer_counts[direction], sizeof(*device->mapped_buffers[direction]));
         if (!device->mapped_buffers[direction]) {
             fail("calloc");
         }
         for (unsigned index = 0; index < device->buffer_counts[direction]; index++) {
-            struct fades_buffer_info buffer = {.queue = direction, .index = index};
-            if (ioctl(device->fd, FADESIOC_QUERYBUF, &buffer) < 0) {
+            struct acceldoku_buffer_info buffer = {.queue = direction, .index = index};
+            if (ioctl(device->fd, ACCELDOKUIOC_QUERYBUF, &buffer) < 0) {
                 fail("QUERYBUF");
             }
             device->mapped_buffers[direction][index] =
@@ -105,18 +105,18 @@ static void setup(struct fades_device *device) {
     }
 }
 
-static void queue(struct fades_device *device, enum fades_queue direction, unsigned index,
+static void queue(struct acceldoku_device *device, enum acceldoku_queue direction, unsigned index,
                   unsigned records) {
-    struct fades_buffer buffer = {.queue = direction, .index = index, .records = records};
-    if (ioctl(device->fd, FADESIOC_QBUF, &buffer) < 0) {
+    struct acceldoku_buffer buffer = {.queue = direction, .index = index, .records = records};
+    if (ioctl(device->fd, ACCELDOKUIOC_QBUF, &buffer) < 0) {
         fail("QBUF");
     }
 }
 
-static int try_dequeue(struct fades_device *device, enum fades_queue direction,
-                       struct fades_buffer *buffer) {
-    *buffer = (struct fades_buffer){.queue = direction};
-    if (ioctl(device->fd, FADESIOC_DQBUF, buffer) == 0) {
+static int try_dequeue(struct acceldoku_device *device, enum acceldoku_queue direction,
+                       struct acceldoku_buffer *buffer) {
+    *buffer = (struct acceldoku_buffer){.queue = direction};
+    if (ioctl(device->fd, ACCELDOKUIOC_DQBUF, buffer) == 0) {
         return 1;
     }
     if (errno == EAGAIN || errno == EINTR) {
@@ -126,7 +126,7 @@ static int try_dequeue(struct fades_device *device, enum fades_queue direction,
     return 0;
 }
 
-static void wait_ready(struct fades_device *device, short events) {
+static void wait_ready(struct acceldoku_device *device, short events) {
     struct pollfd descriptor = {.fd = device->fd, .events = events};
     int ret;
     do {
@@ -173,7 +173,7 @@ static void copy_records(uint8_t *dst, const uint8_t *src, unsigned count, uint6
 
 static void fill(uint8_t *dst, const uint8_t *src, size_t records, size_t *position,
                  uint64_t first) {
-    unsigned remaining = FADES_RECORDS_PER_SLOT;
+    unsigned remaining = ACCELDOKU_RECORDS_PER_SLOT;
     while (remaining) {
         unsigned count =
             records - *position < remaining ? (unsigned)(records - *position) : remaining;
@@ -227,30 +227,30 @@ int main(int argc, char **argv) {
     size_t records;
     uint8_t *source = load_input(argv[1], &records);
 
-    struct fades_device device = {
+    struct acceldoku_device device = {
         .fd = -1,
-        .buffer_counts = {[FADES_QUEUE_TX] = number(argv[2]), [FADES_QUEUE_RX] = number(argv[3])},
+        .buffer_counts = {[ACCELDOKU_QUEUE_TX] = number(argv[2]), [ACCELDOKU_QUEUE_RX] = number(argv[3])},
     };
     setup(&device);
 
     // Enqueue all output buffers.
-    for (unsigned index = 0; index < device.buffer_counts[FADES_QUEUE_RX]; index++) {
-        queue(&device, FADES_QUEUE_RX, index, 0);
+    for (unsigned index = 0; index < device.buffer_counts[ACCELDOKU_QUEUE_RX]; index++) {
+        queue(&device, ACCELDOKU_QUEUE_RX, index, 0);
     }
 
     uint64_t submitted = 0;
     uint64_t received = 0;
     size_t position = 0;
     // Fill and enqueue all initial input buffers.
-    for (unsigned index = 0; index < device.buffer_counts[FADES_QUEUE_TX]; index++) {
-        fill(device.mapped_buffers[FADES_QUEUE_TX][index], source, records, &position, submitted);
-        queue(&device, FADES_QUEUE_TX, index, FADES_RECORDS_PER_SLOT);
-        submitted += FADES_RECORDS_PER_SLOT;
+    for (unsigned index = 0; index < device.buffer_counts[ACCELDOKU_QUEUE_TX]; index++) {
+        fill(device.mapped_buffers[ACCELDOKU_QUEUE_TX][index], source, records, &position, submitted);
+        queue(&device, ACCELDOKU_QUEUE_TX, index, ACCELDOKU_RECORDS_PER_SLOT);
+        submitted += ACCELDOKU_RECORDS_PER_SLOT;
     }
     // Start timing and streaming.
     double begin = now();
     double deadline = begin + seconds;
-    control(device.fd, FADESIOC_STREAMON);
+    control(device.fd, ACCELDOKUIOC_STREAMON);
     int feeding = 1;
     while (feeding || received != submitted) {
         // After the timed interval, wait only for output.
@@ -258,24 +258,24 @@ int main(int argc, char **argv) {
         if (feeding && now() >= deadline) {
             feeding = 0;
         }
-        struct fades_buffer buffer;
+        struct acceldoku_buffer buffer;
         // During the timed interval, dequeue, fill and enqueue input buffers.
-        if (feeding && try_dequeue(&device, FADES_QUEUE_TX, &buffer)) {
-            fill(device.mapped_buffers[FADES_QUEUE_TX][buffer.index], source, records, &position,
+        if (feeding && try_dequeue(&device, ACCELDOKU_QUEUE_TX, &buffer)) {
+            fill(device.mapped_buffers[ACCELDOKU_QUEUE_TX][buffer.index], source, records, &position,
                  submitted);
-            queue(&device, FADES_QUEUE_TX, buffer.index, FADES_RECORDS_PER_SLOT);
-            submitted += FADES_RECORDS_PER_SLOT;
+            queue(&device, ACCELDOKU_QUEUE_TX, buffer.index, ACCELDOKU_RECORDS_PER_SLOT);
+            submitted += ACCELDOKU_RECORDS_PER_SLOT;
         }
-        if (try_dequeue(&device, FADES_QUEUE_RX, &buffer)) {
+        if (try_dequeue(&device, ACCELDOKU_QUEUE_RX, &buffer)) {
             received += buffer.records;
-            queue(&device, FADES_QUEUE_RX, buffer.index, 0);
+            queue(&device, ACCELDOKU_QUEUE_RX, buffer.index, 0);
         }
     }
     // Stop timing.
     double elapsed = now() - begin;
     // Check statistics.
-    struct fades_solver_stats stats;
-    if (ioctl(device.fd, FADESIOC_SOLVER_STATS, &stats) < 0) {
+    struct acceldoku_solver_stats stats;
+    if (ioctl(device.fd, ACCELDOKUIOC_SOLVER_STATS, &stats) < 0) {
         fail("SOLVER_STATS");
     }
     if (stats.accepted != submitted || stats.emitted != submitted ||
@@ -289,14 +289,14 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     // Stop the device.
-    control(device.fd, FADESIOC_STREAMOFF);
+    control(device.fd, ACCELDOKUIOC_STREAMOFF);
     printf("Stream (no output read): TX/RX=%u/%u, %" PRIu64 " records, %.6f s, %.6f Mproblem/s\n",
-           device.buffer_counts[FADES_QUEUE_TX], device.buffer_counts[FADES_QUEUE_RX], received,
+           device.buffer_counts[ACCELDOKU_QUEUE_TX], device.buffer_counts[ACCELDOKU_QUEUE_RX], received,
            elapsed, received / elapsed / 1e6);
     // Clean up.
-    for (enum fades_queue direction = FADES_QUEUE_TX; direction <= FADES_QUEUE_RX; direction++) {
+    for (enum acceldoku_queue direction = ACCELDOKU_QUEUE_TX; direction <= ACCELDOKU_QUEUE_RX; direction++) {
         for (unsigned index = 0; index < device.buffer_counts[direction]; index++) {
-            if (munmap(device.mapped_buffers[direction][index], FADES_DMA_SLOT_BYTES)) {
+            if (munmap(device.mapped_buffers[direction][index], ACCELDOKU_DMA_SLOT_BYTES)) {
                 fail("munmap");
             }
         }

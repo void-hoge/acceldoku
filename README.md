@@ -1,4 +1,4 @@
-# FADES: FPGA-Accelerated Deductive and Explorative Sudoku Solver
+# ACCELDOKU: FPGA-Accelerated Deductive and Explorative Sudoku Solver
 
 KV260 向けの SystemVerilog 数独ソルバー。Singles / Locked Candidates を並列適用し、停滞時は候補を二分して深さ優先探索する。
 PS の Linux プログラムから DDR / AXI DMA 経由で問題を投入し、ID 付きの結果を回収する。
@@ -15,20 +15,20 @@ PS の Linux プログラムから DDR / AXI DMA 経由で問題を投入し、I
 
 Linux カーネルドライバー、C ioctl ABI、C++20 ライブラリーと実機試験は `host/` にある。
 現行 ABI は **v8**。TX/RX バッファー数を独立に指定し、1面 1 MiB の領域を個別に mmap する。
-`fades::StreamDevice` はバッファー番号を借用し、明示的に投入・返却する C++ API。
+`acceldoku::StreamDevice` はバッファー番号を借用し、明示的に投入・返却する C++ API。
 入出力形式、API、所有権と使用例は [host/README.md](host/README.md) を参照。
 
 | 対象 | ソース | 用途 |
 | --- | --- | --- |
-| C ioctl ABI / ドライバー | `host/driver/include/fades_ioctl.h`、`host/driver/src/fades.c` | `/dev/fades` の DMA・バッファー・制御 |
-| C++ ライブラリー | `host/lib/include/fades/stream_device.hpp`、`host/lib/src/stream_device.cpp` | レコード変換とストリーミング操作 |
-| C / C++ ベンチマーク | `host/tools/fades_run.c`、`host/tools/cpp/benchmark/benchmark.cpp` | 入力を反復投入し、結果を件数のみ集計 |
+| C ioctl ABI / ドライバー | `host/driver/include/acceldoku_ioctl.h`、`host/driver/src/acceldoku.c` | `/dev/acceldoku` の DMA・バッファー・制御 |
+| C++ ライブラリー | `host/lib/include/acceldoku/stream_device.hpp`、`host/lib/src/stream_device.cpp` | レコード変換とストリーミング操作 |
+| C / C++ ベンチマーク | `host/tools/acceldoku_run.c`、`host/tools/cpp/benchmark/benchmark.cpp` | 入力を反復投入し、結果を件数のみ集計 |
 | C++ 固定件数検証 | `host/tools/cpp/verify/` | fastdoku の結果と順序非依存チェックサムを照合 |
 
 C++ ベンチマークは 1 行 81 文字の問題テキストを入力する。デバイスの準備後、KV260 で実行する。
 
 ```sh
-build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
+build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 ```
 
 ## 2. 実機を準備する
@@ -37,7 +37,7 @@ build/kv260-ps/host/tools/cpp/fades_benchmark sim/data/17puz49158.txt 8 64 10
 
 ```sh
 # 開発機: CMake 3.25以降、Ninja、Vivado 2024.2 + K26サポート、dtc
-cmake --preset kv260-pl -DFADES_CORES=6 -DFADES_VIVADO_JOBS=2
+cmake --preset kv260-pl -DACCELDOKU_CORES=6 -DACCELDOKU_VIVADO_JOBS=2
 cmake --build --preset kv260-pl
 ```
 
@@ -46,7 +46,7 @@ cmake --build --preset kv260-pl
 配線後の `AggressiveExplore` 物理最適化と最終タイミング検査も自動実行する。
 Vivadoのパスを指定する場合は、configure時に
 `-DVIVADO_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/vivado` を追加する。
-`FADES_VIVADO_JOBS` はVivado内部の並列数。
+`ACCELDOKU_VIVADO_JOBS` はVivado内部の並列数。
 
 | ターゲット        | 処理                                             |
 |-------------------|--------------------------------------------------|
@@ -55,7 +55,7 @@ Vivadoのパスを指定する場合は、configure時に
 | `kv260-bitstream` | 配置配線・bitstream生成・タイミング／CDC等の検査 |
 | `kv260-package`   | firmwareパッケージまで                           |
 
-生成物は `build/kv260-pl/fpga/kv260/firmware/fades/`。
+生成物は `build/kv260-pl/fpga/kv260/firmware/acceldoku/`。
 Vivadoプロジェクトと検査レポートは `build/kv260-pl/fpga/kv260/implementation/` に生成する。
 ソースとfirmwareはユーザーが任意の方法で実機へコピーする。
 ビルド処理は接続先や実機上の配置先を仮定せず、自動転送もしない。
@@ -68,11 +68,11 @@ cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-通常のbuildで `build/kv260-ps/host/driver/src/fades.ko`、Cツール
-`build/kv260-ps/host/tools/fades_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/fades_benchmark` を生成する。
+通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
+`build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` を生成する。
 実機自身のコンパイラーと実行中カーネルのヘッダーを使う。
-firmwareを配置し、`xmutil loadapp fades` と `insmod fades.ko` を実行すると **`/dev/fades`** が使える。
+firmwareを配置し、`xmutil loadapp acceldoku` と `insmod acceldoku.ko` を実行すると **`/dev/acceldoku`** が使える。
 転送・Arm64 ビルド・ロードの手順と、各ボード用ファイルの役割は
 [fpga/kv260/README.md](fpga/kv260/README.md) にまとめる。
 
@@ -82,11 +82,11 @@ CPU参照に fastdoku を使用するため、Rust / Cargo と submodule の取�
 
 ```sh
 git submodule update --init --recursive
-cmake --preset host -DFADES_CORES=6
+cmake --preset host -DACCELDOKU_CORES=6
 cmake --build --preset host
 ctest --preset host                         # CPU参照・RTLの全試験
-ctest --preset host -L '^fades_core$'        # コア単体：全問題集・ストレス・構造合成・lint
-ctest --preset host -L '^fades$'             # 指定コア数で供給・回収を含む統合試験・lint
+ctest --preset host -L '^acceldoku_core$'        # コア単体：全問題集・ストレス・構造合成・lint
+ctest --preset host -L '^acceldoku$'             # 指定コア数で供給・回収を含む統合試験・lint
 ctest --preset host -L '^deduction_engine$'  # 推論の有向試験・形式検証
 ctest --preset host -L '^async_queue$'       # 実装に使うXPM非同期FIFOの試験
 ```
@@ -126,26 +126,26 @@ XPM試験にはVivadoが必要。`kv260-ps` ではRTL検証ツール・Vivado・
 各プリセットは `cmake --build --preset <名前>` で必要なものをまとめてビルドする。
 CPU参照・RTL試験は `ctest --preset host`、実機試験は `host/tests/` のPythonを使う。
 C++ライブラリーとベンチマークは既定で有効。不要な場合はconfigure時に
-`-DFADES_BUILD_CPP=OFF` を指定する。RTL・カーネルモジュールをビルドせずC++のみを
+`-DACCELDOKU_BUILD_CPP=OFF` を指定する。RTL・カーネルモジュールをビルドせずC++のみを
 ビルドする場合は `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
 
-コア数はプリセットとは独立した `-DFADES_CORES=1`〜`6`（既定6）。
+コア数はプリセットとは独立した `-DACCELDOKU_CORES=1`〜`6`（既定6）。
 ボードトップからコア群まで伝播し、シミュレーションにも同じ値を使う。
 ホストABIの6コア分のカウンターレイアウトは固定で、未実装コア分は0になる。
 構成変更時は同じビルドディレクトリで再configureしてからビルドする。
 
 ```sh
-cmake --preset host -DFADES_CORES=1
+cmake --preset host -DACCELDOKU_CORES=1
 cmake --build --preset host
-ctest --preset host -L '^fades$'
+ctest --preset host -L '^acceldoku$'
 ```
 
 複数構成を保持するときは `-B` で出力先を分ける:
 
 ```sh
-cmake --preset host -B build/host-1core -DFADES_CORES=1
+cmake --preset host -B build/host-1core -DACCELDOKU_CORES=1
 cmake --build build/host-1core
-ctest --test-dir build/host-1core --output-on-failure -L '^fades$'
+ctest --test-dir build/host-1core --output-on-failure -L '^acceldoku$'
 ```
 
 **`-B` で出力先を変えた場合は、build・testでもそのディレクトリを指定する。**
@@ -161,11 +161,11 @@ ctest --test-dir build/host-1core --output-on-failure -L '^fades$'
 | 対象 | 読むファイル | 役割 |
 | --- | --- | --- |
 | ホスト利用 | `host/README.md` | 転送形式、C/C++ API、ベンチマーク・実機試験 |
-| Linux接続 | `host/driver/include/fades_ioctl.h` → `host/driver/src/fades.c` | 公開ABI → バッファ・DMA・制御 |
-| C++接続 | `host/lib/include/fades/stream_device.hpp` → `host/lib/src/stream_device.cpp` | 公開API → ioctl / mmap / poll |
+| Linux接続 | `host/driver/include/acceldoku_ioctl.h` → `host/driver/src/acceldoku.c` | 公開ABI → バッファ・DMA・制御 |
+| C++接続 | `host/lib/include/acceldoku/stream_device.hpp` → `host/lib/src/stream_device.cpp` | 公開API → ioctl / mmap / poll |
 | ボード生成 | `fpga/kv260/scripts/build.tcl` | PS・DMA・クロックの接続、実装、出力検査 |
-| PLの入口 | `rtl/fades_axi.sv` → `fades.sv` | 制御 → 供給・ID管理・結果回収・コア群 |
-| 探索 | `rtl/fades_core.sv` → `deduction_engine.sv` / `branch_generator.sv` | 状態列・探索 → 推論 / 分岐 |
+| PLの入口 | `rtl/acceldoku_axi.sv` → `acceldoku.sv` | 制御 → 供給・ID管理・結果回収・コア群 |
+| 探索 | `rtl/acceldoku_core.sv` → `deduction_engine.sv` / `branch_generator.sv` | 状態列・探索 → 推論 / 分岐 |
 | クロック境界 | `rtl/async_queue.sv` | XPM非同期FIFOと試験用モデル |
 | CPU照合 | `reference/sudoku.hpp`、`reference/fastdoku/` | RTL試験用の fastdoku 参照ソルバーと形式変換 |
 
@@ -180,7 +180,7 @@ C++ベンチマークによる17ヒント49,158問の反復投入を5秒ずつ3�
 入力変換・初期TX投入は計測前に行い、計測には `STREAMON`、継続コピー・一意ID付与、
 ioctl、DMA・求解、RX返却と最終排出を含む。**出力の内容は読まず、件数だけ集計**した。
 実機の PS クロック読み出しは pl0 187,499,999 Hz、pl1 115,384,615 Hz。
-ロードした `fades.bit.bin` の SHA-256 は
+ロードした `acceldoku.bit.bin` の SHA-256 は
 `1bc89fe1f9f3083061d277276cc28b6e7ceb0c5a59a733e2319df5677570fba8`。
 ビットストリーム内部のクロック構成はこの測定では別途確認していない。
 入力問題の出所は [sim/README.md](sim/README.md#問題集)。

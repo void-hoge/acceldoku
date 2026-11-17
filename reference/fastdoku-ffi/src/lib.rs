@@ -1,6 +1,6 @@
 // The caller provides valid 81-byte input and output arrays and a limit of 1 or 2.
 #[no_mangle]
-pub unsafe extern "C" fn fades_fastdoku_solve(
+pub unsafe extern "C" fn acceldoku_fastdoku_solve(
     input: *const u8,
     output: *mut u8,
     limit: u32,

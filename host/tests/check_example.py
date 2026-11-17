@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 from check_stream import fill
-from fades_device import RECORDS
+from acceldoku_device import RECORDS
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     p.add_argument("--repeat", type=int, default=1)
     args = p.parse_args()
     exe = str(pathlib.Path(args.executable).resolve())
-    with tempfile.TemporaryDirectory(prefix="fades-example-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="acceldoku-example-") as tmp:
         source = pathlib.Path(tmp) / "input.raw"
         n = RECORDS * 3 + 19
         data = bytearray(n * 64)

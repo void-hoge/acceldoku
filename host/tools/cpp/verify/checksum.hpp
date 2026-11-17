@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <fades/stream_device.hpp>
+#include <acceldoku/stream_device.hpp>
 #if defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #include <arm_neon.h>
 #endif
@@ -11,7 +11,7 @@
 struct Checksum {
     std::uint64_t count = 0, sum = 0, xors = 0;
 
-    void add(const fades::PuzzleRecord &record) noexcept {
+    void add(const acceldoku::PuzzleRecord &record) noexcept {
         std::uint32_t lanes[4] = {2166136261U, 2246822519U, 3266489917U, 668265263U};
 #if defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
         auto state = vld1q_u32(lanes);

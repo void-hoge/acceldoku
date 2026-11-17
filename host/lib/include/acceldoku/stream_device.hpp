@@ -3,12 +3,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <fades_ioctl.h>
+#include <acceldoku_ioctl.h>
 #include <optional>
 #include <span>
 #include <vector>
 
-namespace fades {
+namespace acceldoku {
 
 /**
  * @brief A 64-byte hardware input or output record.
@@ -23,7 +23,7 @@ static_assert(sizeof(PuzzleRecord) == 64);
 using Puzzle = std::array<std::uint8_t, 81>;
 
 /** @brief Named cumulative statistics from the ioctl ABI. */
-using SolverStats = ::fades_solver_stats;
+using SolverStats = ::acceldoku_solver_stats;
 
 /**
  * @brief Encode a puzzle in the hardware input format.
@@ -99,7 +99,7 @@ class StreamDevice {
      * @return Maximum number of records per buffer.
      */
     static constexpr std::size_t batch_capacity() noexcept {
-        return FADES_RECORDS_PER_SLOT;
+        return ACCELDOKU_RECORDS_PER_SLOT;
     }
 
     /**
@@ -254,4 +254,4 @@ class StreamDevice {
     std::vector<std::size_t> rx_records_;       ///< Received record count per borrowed RX buffer.
     StreamState stream_state_ = StreamState::configured; ///< Current stream state.
 };
-} // namespace fades
+} // namespace acceldoku

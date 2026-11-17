@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 
-from fades_device import Device
+from acceldoku_device import Device
 
 
 def poll_once(fd, events, timeout):
@@ -15,7 +15,7 @@ def poll_once(fd, events, timeout):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "/dev/fades"
+    path = sys.argv[1] if len(sys.argv) > 1 else "/dev/acceldoku"
     device = Device(path, 1, 1)
     try:
         # No HUP on a fresh open; even a pre-start STREAMOFF is explicit stop.

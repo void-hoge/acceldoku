@@ -1,5 +1,5 @@
 [package]
-name = "fades-fastdoku-ffi"
+name = "acceldoku-fastdoku-ffi"
 version = "0.1.0"
 edition = "2021"
 publish = false

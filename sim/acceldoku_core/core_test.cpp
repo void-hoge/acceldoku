@@ -1,6 +1,6 @@
 // Black-box, cycle-accurate RTL testbench. No access to internal RAM is used:
 // the half-full starting state is built exclusively through ready/valid input.
-#include "Vfades_core.h"
+#include "Vacceldoku_core.h"
 #include "verilated.h"
 #include "sudoku.hpp"
 #include <algorithm>
@@ -101,19 +101,19 @@ static void write_totals(std::ostream& out, const Stats& s) {
         << ",\"concurrent_push_enqueue\":" << s.concurrent_push_enqueue
         << ",\"prefill\":" << s.initial_prefill << ",\"deque_depth\":" << deque_depth << '}';
 }
-static void tick(Vfades_core& dut) {
+static void tick(Vacceldoku_core& dut) {
     dut.clk = 0; dut.eval();
     dut.clk = 1; dut.eval();
     dut.clk = 0; dut.eval();
 }
-static void reset(Vfades_core& dut) {
+static void reset(Vacceldoku_core& dut) {
     dut.reset = 1; dut.enable = 0; dut.input_valid = 0; dut.result_ready = 0;
     tick(dut); tick(dut); dut.reset = 0; dut.eval();
 }
 static uint32_t random_word(uint32_t& x) {
     x ^= x << 13; x ^= x >> 17; x ^= x << 5; return x;
 }
-static Stats run(Vfades_core& dut, const std::vector<Problem>& problems,
+static Stats run(Vacceldoku_core& dut, const std::vector<Problem>& problems,
                  const std::string& name, bool stress, std::ofstream& csv) {
     reset(dut);
     // Fill half of the deque, or the whole dataset when it has fewer entries.
@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
         csv << "scenario,problem,cycles,inferences,branches,contradictions,discarded,wasted_inferences\n";
         VerilatedContext context;
         context.threads(1);
-        Vfades_core dut{&context};
+        Vacceldoku_core dut{&context};
         auto dataset = run(dut, problems, "dataset", false, csv);
         std::vector<Problem> directed;
         Problem completed;

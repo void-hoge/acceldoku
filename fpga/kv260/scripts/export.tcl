@@ -3,7 +3,7 @@
 proc export_firmware {root out} {
     global core_period dma_period
     file delete -force $out/build_complete
-    if {[current_project -quiet] eq ""} { open_project $out/project/fades.xpr }
+    if {[current_project -quiet] eq ""} { open_project $out/project/acceldoku.xpr }
     if {[get_property PROGRESS [get_runs impl_1]] ne "100%" ||
         ![string match "write_bitstream Complete*" [get_property STATUS [get_runs impl_1]]]} {
         error "A completed write_bitstream run is required for export"
@@ -35,14 +35,14 @@ proc export_firmware {root out} {
     # synchronizers. Only asynchronous reset inputs are waived, not datapaths.
     set reset_first [get_pins -hier -regexp {.*[/]stream/(core_reset_sync_reg\[0\]|input_queue/read_reset_sync_reg\[0\]|output_queue/reset_sync_reg\[0\])/PRE}]
     if {![llength $reset_first]} { error "Asynchronous reset synchronizers missing" }
-    create_waiver -type CDC -id CDC-10 -to $reset_first -user fades \
+    create_waiver -type CDC -id CDC-10 -to $reset_first -user acceldoku \
         -desc {Board reset OR software reset drives async assertion only; local three-stage release is synchronized. Board reset changes only during global initialization.}
-    create_waiver -type CDC -id CDC-11 -to $reset_first -user fades \
+    create_waiver -type CDC -id CDC-11 -to $reset_first -user acceldoku \
         -desc {Asynchronous reset intentionally fans out to independent local reset-release synchronizers. FIFO reset-busy and local reset gates tolerate differing release cycles; reset is held throughout reinitialization.}
     # Snapshot stays held until the next request; receiver waits for synchronized ack.
     create_waiver -type CDC -id CDC-15 \
         -from [get_pins -hier -regexp {.*core_snapshot_reg\[[0-9]+\]/C}] \
-        -to [get_pins -hier -regexp {.*[/]snapshot_reg\[[0-9]+\]/D}] -user fades \
+        -to [get_pins -hier -regexp {.*[/]snapshot_reg\[[0-9]+\]/D}] -user acceldoku \
         -desc {Bundled snapshot data is held until the next request; receiver waits for synchronized ack. Datapath delay and bus skew are constrained to 5 ns.}
     set cdc_report [report_cdc -details -return_string -file $out/cdc.rpt]
     if {[regexp -line {^CDC-[0-9]+[ \t]+Critical[ \t]+[1-9]} $cdc_report]} {
@@ -66,9 +66,9 @@ proc export_firmware {root out} {
     write_checkpoint -force $out/verified_routed.dcp
     set bit [get_property DIRECTORY [get_runs impl_1]]/system_wrapper.bit
     write_cfgmem -force -format bin -interface SMAPx32 -disablebitswap \
-        -loadbit "up 0x0 $bit" -file $out/fades.bit.bin
-    write_hw_platform -fixed -include_bit -force -file $out/fades.xsa
+        -loadbit "up 0x0 $bit" -file $out/acceldoku.bit.bin
+    write_hw_platform -fixed -include_bit -force -file $out/acceldoku.xsa
     set stamp [open $out/build_complete w]
-    puts $stamp "Vivado [version -short], KV260 fades, core [get_property PERIOD [get_clocks clk_pl_1]] ns / DMA [get_property PERIOD [get_clocks clk_pl_0]] ns, fan PWM on A12"
+    puts $stamp "Vivado [version -short], KV260 acceldoku, core [get_property PERIOD [get_clocks clk_pl_1]] ns / DMA [get_property PERIOD [get_clocks clk_pl_0]] ns, fan PWM on A12"
     close $stamp
 }

@@ -1,5 +1,5 @@
 add_executable(reference_test reference_test.cpp)
 target_link_libraries(reference_test PRIVATE sudoku_reference)
 target_compile_options(reference_test PRIVATE -Wall -Wextra -Werror)
-add_test(NAME reference-dataset COMMAND reference_test "${FADES_DATASET}")
+add_test(NAME reference-dataset COMMAND reference_test "${ACCELDOKU_DATASET}")
 set_tests_properties(reference-dataset PROPERTIES LABELS reference TIMEOUT 1800)

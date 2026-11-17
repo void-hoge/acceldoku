@@ -1,4 +1,4 @@
-#include "Vfades.h"
+#include "Vacceldoku.h"
 #include "verilated.h"
 #include "sudoku.hpp"
 #include <array>
@@ -15,7 +15,7 @@ static uint64_t id(unsigned i) { return 0xbadc0ffe12340000ULL ^ (uint64_t(i)*791
 static void nibble(Record& r, unsigned bit, unsigned n) { r[bit/32] |= n << (bit%32); }
 static unsigned nibble(const Record& r, unsigned bit) { return (r[bit/32] >> (bit%32)) & 15; }
 struct Sim {
-    Vfades d;
+    Vacceldoku d;
     uint64_t t=0;
     unsigned dma_half=3, core_half=5;
     uint32_t rng=0x1234abcd;
@@ -104,8 +104,8 @@ static void run(Sim& s, const std::vector<Problem>& ps, unsigned packet, bool st
     if(stress) check(d.input_stall_cycles>0,"Backpressure not exercised");
     check(d.queue_peak>0 && d.queue_peak<=64 && d.processing_cycles>0,"Invalid queue or work counters");
     uint64_t sum_sent=0,sum_got=0,sum_busy=0;
-    for(unsigned g=0;g<FADES_CORES;++g) {
-#if FADES_CORES == 1
+    for(unsigned g=0;g<ACCELDOKU_CORES;++g) {
+#if ACCELDOKU_CORES == 1
         sum_sent += d.core_dispatch_counts;
         sum_got += d.core_result_counts;
         sum_busy += d.core_busy_cycles;

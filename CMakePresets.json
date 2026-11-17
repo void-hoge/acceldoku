@@ -10,25 +10,25 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": "OFF",
-        "FADES_BUILD_DRIVER": "OFF",
-        "FADES_BUILD_SIM": "OFF",
-        "FADES_BUILD_FPGA": "OFF"
+        "ACCELDOKU_BUILD_DRIVER": "OFF",
+        "ACCELDOKU_BUILD_SIM": "OFF",
+        "ACCELDOKU_BUILD_FPGA": "OFF"
       }
     },
     {
       "name": "host", "inherits": "base",
       "displayName": "CPU reference and RTL simulation",
-      "cacheVariables": { "FADES_BUILD_SIM": "ON", "BUILD_TESTING": "ON" }
+      "cacheVariables": { "ACCELDOKU_BUILD_SIM": "ON", "BUILD_TESTING": "ON" }
     },
     {
       "name": "kv260-ps", "inherits": "base",
       "displayName": "KV260 kernel module (native build)",
-      "cacheVariables": { "FADES_BUILD_DRIVER": "ON" }
+      "cacheVariables": { "ACCELDOKU_BUILD_DRIVER": "ON" }
     },
     {
       "name": "kv260-pl", "inherits": "base",
       "displayName": "KV260 FPGA implementation and firmware",
-      "cacheVariables": { "FADES_BUILD_FPGA": "ON" }
+      "cacheVariables": { "ACCELDOKU_BUILD_FPGA": "ON" }
     }
   ],
   "buildPresets": [
