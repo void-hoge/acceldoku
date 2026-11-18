@@ -14,7 +14,7 @@ PS の Linux プログラムから DDR / AXI DMA 経由で問題を投入し、I
 ## 1. ホスト側
 
 Linux カーネルドライバー、C ioctl ABI、C++20 ライブラリーと実機試験は `host/` にある。
-現行 ABI は **v8**。TX/RX バッファー数を独立に指定し、1面 1 MiB の領域を個別に mmap する。
+現行 ABI は **v9**。TX/RX バッファー数を独立に指定し、1面 1 MiB の領域を個別に mmap する。
 `acceldoku::StreamDevice` はバッファー番号を借用し、明示的に投入・返却する C++ API。
 入出力形式、API、所有権と使用例は [host/README.md](host/README.md) を参照。
 
@@ -60,17 +60,21 @@ Vivadoプロジェクトと検査レポートは `build/kv260-pl/fpga/kv260/impl
 ソースとfirmwareはユーザーが任意の方法で実機へコピーする。
 ビルド処理は接続先や実機上の配置先を仮定せず、自動転送もしない。
 
-KV260上で必要なパッケージを入れ、ソースを配置したリポジトリルートでビルドする。
+KV260上で必要なパッケージを入れ、Rust / Cargo 1.83 以降をインストールして PATH に通す。
+Ubuntu 24.04 の `apt` 版 Cargo 1.75 は lockfile v4 に対応していない。
+Rustup を使用する場合は、configure 前に `. "$HOME/.cargo/env"` を実行する。
+ソースを配置したリポジトリルートでビルドする。
 
 ```sh
 sudo apt install build-essential cmake ninja-build python3 "linux-headers-$(uname -r)"
+git submodule update --init --recursive
 cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
 通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` を生成する。
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` と `acceldoku_verify` を生成する。
 実機自身のコンパイラーと実行中カーネルのヘッダーを使う。
 firmwareを配置し、`xmutil loadapp acceldoku` と `insmod acceldoku.ko` を実行すると **`/dev/acceldoku`** が使える。
 転送・Arm64 ビルド・ロードの手順と、各ボード用ファイルの役割は
@@ -82,13 +86,13 @@ CPU参照に fastdoku を使用するため、Rust / Cargo と submodule の取�
 
 ```sh
 git submodule update --init --recursive
-cmake --preset host -DACCELDOKU_CORES=6
-cmake --build --preset host
-ctest --preset host                         # CPU参照・RTLの全試験
-ctest --preset host -L '^acceldoku_core$'        # コア単体：全問題集・ストレス・構造合成・lint
-ctest --preset host -L '^acceldoku$'             # 指定コア数で供給・回収を含む統合試験・lint
-ctest --preset host -L '^deduction_engine$'  # 推論の有向試験・形式検証
-ctest --preset host -L '^async_queue$'       # 実装に使うXPM非同期FIFOの試験
+cmake --preset dev -DACCELDOKU_CORES=6
+cmake --build --preset dev
+ctest --preset dev                         # CPU参照・RTLの全試験
+ctest --preset dev -L '^acceldoku_core$'   # コア単体：全問題集・ストレス・構造合成・lint
+ctest --preset dev -L '^acceldoku$'        # 指定コア数で供給・回収を含む統合試験・lint
+ctest --preset dev -L '^deduction_engine$' # 推論の有向試験・形式検証
+ctest --preset dev -L '^async_queue$'      # 実装に使うXPM非同期FIFOの試験
 ```
 
 ラベルは検証対象の `sim/` ディレクトリ名。対象を選ぶと関連する検証をまとめて実行する。
@@ -97,18 +101,18 @@ ctest --preset host -L '^async_queue$'       # 実装に使うXPM非同期FIFO�
 `-N` で試験一覧を表示し、個別の試験は `-R` でも選択できる。
 
 ```sh
-ctest --preset host -N
-ctest --preset host -R '^axi$'
-ctest --preset host -L '^branch_generator$'
-ctest --preset host -L '^reference$'
+ctest --preset dev -N
+ctest --preset dev -R '^axi$'
+ctest --preset dev -L '^branch_generator$'
+ctest --preset dev -L '^reference$'
 ```
 
 XPM試験は `xvlog` が見つかった場合に登録する。パスを明示する場合:
 
 ```sh
-cmake --preset host -DXVLOG_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/xvlog
-cmake --build --preset host
-ctest --preset host -L '^async_queue$'
+cmake --preset dev -DXVLOG_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/xvlog
+cmake --build --preset dev
+ctest --preset dev -L '^async_queue$'
 ```
 
 試験の詳細と回帰比較は [sim/README.md](sim/README.md)。必要ツールは
@@ -119,15 +123,12 @@ XPM試験にはVivadoが必要。`kv260-ps` ではRTL検証ツール・Vivado・
 
 | プリセット | 実行場所 | 通常のbuildで生成するもの | 出力先 |
 |------------|----------|--------------------------|--------|
-| `host` | 開発機 | CPU参照・RTL試験、C++ライブラリー・ベンチマーク | `build/host/` |
-| `kv260-pl` | 開発機 | FPGA回路・検査レポート・firmware、C++ライブラリー・ベンチマーク | `build/kv260-pl/` |
-| `kv260-ps` | KV260 | カーネルドライバー、Cツール、C++ライブラリー・ベンチマーク | `build/kv260-ps/` |
+| `dev` | 開発機 | CPU参照・RTL試験 | `build/dev/` |
+| `kv260-pl` | 開発機 | FPGA回路・検査レポート・firmware | `build/kv260-pl/` |
+| `kv260-ps` | KV260 | カーネルドライバー、Cツール、C++ライブラリー・ベンチマーク・検証ツール | `build/kv260-ps/` |
 
 各プリセットは `cmake --build --preset <名前>` で必要なものをまとめてビルドする。
-CPU参照・RTL試験は `ctest --preset host`、実機試験は `host/tests/` のPythonを使う。
-C++ライブラリーとベンチマークは既定で有効。不要な場合はconfigure時に
-`-DACCELDOKU_BUILD_CPP=OFF` を指定する。RTL・カーネルモジュールをビルドせずC++のみを
-ビルドする場合は `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
+CPU参照・RTL試験は `ctest --preset dev`、実機試験は `host/tests/` のPythonを使う。
 
 コア数はプリセットとは独立した `-DACCELDOKU_CORES=1`〜`6`（既定6）。
 ボードトップからコア群まで伝播し、シミュレーションにも同じ値を使う。
@@ -135,26 +136,16 @@ C++ライブラリーとベンチマークは既定で有効。不要な場合�
 構成変更時は同じビルドディレクトリで再configureしてからビルドする。
 
 ```sh
-cmake --preset host -DACCELDOKU_CORES=1
-cmake --build --preset host
-ctest --preset host -L '^acceldoku$'
+cmake --preset dev -DACCELDOKU_CORES=1
+cmake --build --preset dev
+ctest --preset dev -L '^acceldoku$'
 ```
-
-複数構成を保持するときは `-B` で出力先を分ける:
-
-```sh
-cmake --preset host -B build/host-1core -DACCELDOKU_CORES=1
-cmake --build build/host-1core
-ctest --test-dir build/host-1core --output-on-failure -L '^acceldoku$'
-```
-
-**`-B` で出力先を変えた場合は、build・testでもそのディレクトリを指定する。**
 
 ビルドの並列数を制限したい場合は `--parallel 4` などを追加できる。
 これはビルドジョブ数で、FPGAのコア数とは独立。省略時はNinjaの既定の並列度を使う。
 
 ツールのパスなどのローカル設定は `CMakeUserPresets.json` に記述できる（Git管理外）。
-一覧は `cmake --list-presets`、試験一覧は `ctest --preset host -N`。
+一覧は `cmake --list-presets`、試験一覧は `ctest --preset dev -N`。
 
 ## ソースを読む順序
 

@@ -104,16 +104,21 @@ build/kv260-pl/fpga/kv260/
 sudo apt install build-essential cmake ninja-build python3 "linux-headers-$(uname -r)"
 ```
 
+別途 Rust / Cargo 1.83 以降をインストールし、PATH に通す。
+Ubuntu 24.04 の `apt` 版 Cargo 1.75 は lockfile v4 を読み込めない。
+Rustup を使用する場合、シェルで `. "$HOME/.cargo/env"` を実行してから configure する。
+古い Cargo で既に configure した場合は `cmake --preset kv260-ps -U CARGO_EXECUTABLE` で再検出する。
 実機側のリポジトリルートで実行する:
 
 ```sh
+git submodule update --init --recursive
 cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
 通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run` と、C++ライブラリー・ベンチマーク
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` を生成する。
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` と `acceldoku_verify` を生成する。
 モジュールは実行中カーネルに対応したヘッダーでビルドする。Vivado・RTL検証ツールは不要。
 ヘッダーを明示する場合はconfigure時に `-DACCELDOKU_KERNEL_BUILD=/path/to/headers` を指定する。
 
@@ -135,6 +140,7 @@ ls -l /dev/acceldoku
 python3 host/tests/check_abi.py
 python3 host/tests/check_poll_stop.py
 python3 host/tests/check_stream.py
+build/kv260-ps/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
 ```
 
 `xmutil` の終了値に加え、listapps、デバイスの存在、機能試験でロードを確認する。

@@ -9,34 +9,31 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "BUILD_TESTING": "OFF",
-        "ACCELDOKU_BUILD_DRIVER": "OFF",
-        "ACCELDOKU_BUILD_SIM": "OFF",
-        "ACCELDOKU_BUILD_FPGA": "OFF"
+        "BUILD_TESTING": "OFF"
       }
     },
     {
-      "name": "host", "inherits": "base",
+      "name": "dev", "inherits": "base",
       "displayName": "CPU reference and RTL simulation",
-      "cacheVariables": { "ACCELDOKU_BUILD_SIM": "ON", "BUILD_TESTING": "ON" }
+      "cacheVariables": { "ACCELDOKU_PROFILE": "dev", "BUILD_TESTING": "ON" }
     },
     {
       "name": "kv260-ps", "inherits": "base",
-      "displayName": "KV260 kernel module (native build)",
-      "cacheVariables": { "ACCELDOKU_BUILD_DRIVER": "ON" }
+      "displayName": "KV260 software and kernel module (native build)",
+      "cacheVariables": { "ACCELDOKU_PROFILE": "kv260-ps" }
     },
     {
       "name": "kv260-pl", "inherits": "base",
       "displayName": "KV260 FPGA implementation and firmware",
-      "cacheVariables": { "ACCELDOKU_BUILD_FPGA": "ON" }
+      "cacheVariables": { "ACCELDOKU_PROFILE": "kv260-pl" }
     }
   ],
   "buildPresets": [
-    { "name": "host", "configurePreset": "host" },
+    { "name": "dev", "configurePreset": "dev" },
     { "name": "kv260-pl", "configurePreset": "kv260-pl" },
     { "name": "kv260-ps", "configurePreset": "kv260-ps" }
   ],
   "testPresets": [
-    { "name": "host", "configurePreset": "host", "output": { "outputOnFailure": true } }
+    { "name": "dev", "configurePreset": "dev", "output": { "outputOnFailure": true } }
   ]
 }

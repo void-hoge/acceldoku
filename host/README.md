@@ -83,9 +83,9 @@ if (auto rx = device.try_dequeue_rx()) {
 ```
 
 ```sh
-cmake -S . -B build/cpp -DACCELDOKU_BUILD_CPP=ON
-cmake --build build/cpp --target acceldoku_benchmark
-build/cpp/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
+cmake --preset kv260-ps
+cmake --build --preset kv260-ps
+build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 ```
 
 入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
@@ -94,13 +94,13 @@ build/cpp/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 
 ### 固定件数の検証
 
-Rust の Cargo と fastdoku サブモジュールが必要。検証機向けにビルド済みの
+Rust / Cargo 1.83 以降と fastdoku サブモジュールが必要。検証機向けにビルド済みの
 `libacceldoku_fastdoku_ffi.a` がある場合は `-DACCELDOKU_FASTDOKU_ARCHIVE=/絶対パス` も指定できる。
 
 ```sh
-cmake -S . -B build/verify -DACCELDOKU_BUILD_VERIFY=ON
-cmake --build build/verify --target acceldoku_verify
-build/verify/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
+cmake --preset kv260-ps
+cmake --build --preset kv260-ps
+build/kv260-ps/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
 ```
 
 入力ファイルの空行以外の全問題を一度ずつ投入する。TX/RX バッファー数は各 4、
@@ -219,8 +219,7 @@ cmake --build --preset kv260-ps
 
 `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` が生成される。
-C++のみなら `cmake -S . -B build/cpp` と `cmake --build build/cpp` を使う。
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` と `acceldoku_verify` が生成される。
 
 以下は `/dev/acceldoku` を利用できる状態で実行する。Cツールの入力は上記の64バイト
 レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、

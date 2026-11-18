@@ -7,28 +7,27 @@ CPU照合には `reference/sudoku.hpp` の変換・検証を通して fastdoku �
 
 ## 実行
 
-必要ツール: CMake 3.25以降、Ninja、C++20、Rust / Cargo、Python 3、Icarus Verilog、Verilator、Yosys。
+必要ツール: CMake 3.25以降、Ninja、C++20、Rust / Cargo 1.83以降、Python 3、Icarus Verilog、Verilator、Yosys。
 実XPMの試験にはVivado 2024.2のxsimを使う。
 初回は `git submodule update --init --recursive` で fastdoku を取得する。
 Cargo はシミュレーションをビルドするときに C ABI ラッパーを静的ライブラリーとしてビルドする。
 ARM64 では fastdoku の NEON バックエンドが有効になる。
 
 ```sh
-cmake --preset host -DACCELDOKU_CORES=6
-cmake --build --preset host
-ctest --preset host
-ctest --preset host -L '^acceldoku_core$'
-ctest --preset host -L '^acceldoku$'
-ctest --preset host -L '^async_queue$'
+cmake --preset dev -DACCELDOKU_CORES=6
+cmake --build --preset dev
+ctest --preset dev
+ctest --preset dev -L '^acceldoku_core$'
+ctest --preset dev -L '^acceldoku$'
+ctest --preset dev -L '^async_queue$'
 ```
 
-`host` はC++ツールとRTLシミュレーションをまとめてビルドし、ドライバーは生成しない。
+`dev` はCPU参照とRTLシミュレーションをビルドする。
 ラベルは `sim/` のディレクトリ名と同じで、検証対象を指定すると、その対象の試験をまとめて実行する。
 `-L` は正規表現なので `^...$` で完全一致を指定する。
 ラベルを省略するとCPU参照試験も含めた登録済みの全試験を実行する。
-`ctest --preset host -N` で一覧を表示し、`-R` で個別の試験名を選ぶこともできる。
-1コア構成は `-DACCELDOKU_CORES=1`。並存させる場合は `-B build/host-1core` 等で
-出力先を変え、build/CTestにもそのディレクトリを指定する。
+`ctest --preset dev -N` で一覧を表示し、`-R` で個別の試験名を選ぶこともできる。
+1コア構成は `-DACCELDOKU_CORES=1`。
 コア数を同じ出力先で変更した場合も、再configure・buildで生成コードを更新する。
 
 `xvlog` がPATH上または `$XILINX_VIVADO/bin` にない場合、XPM試験は登録しない。
@@ -36,7 +35,7 @@ ctest --preset host -L '^async_queue$'
 問題集は `-DACCELDOKU_DATASET=/absolute/path/to/dataset.txt` で変更可能。
 
 GitHub Actions の Host tests は push、pull request、手動実行時に Ubuntu 上で
-6コア構成の `host` プリセットをビルドし、登録された全試験を実行する。
+6コア構成の `dev` プリセットをビルドし、登録された全試験を実行する。
 Vivado がないため XPM 試験は登録されない。KV260 実機を使う
 `host/tests/` の試験は [host/README.md](../host/README.md) の手順で実行する。
 
@@ -71,11 +70,11 @@ cycle単位では再現しないため、実キューの性質をxsimでも確�
 `results.csv.totals.json` を生成する。CSVは問題ごとの完了間隔、totalsは最後の出力排出を含む全体値。
 
 ```sh
-ctest --preset host -L '^acceldoku_core$'
-cmake --build --preset host --target core-summary
+ctest --preset dev -L '^acceldoku_core$'
+cmake --build --preset dev --target core-summary
 
-cmake --preset host -DACCELDOKU_BASELINE=/absolute/path/to/saved/results.csv
-cmake --build --preset host --target regression
+cmake --preset dev -DACCELDOKU_BASELINE=/absolute/path/to/saved/results.csv
+cmake --build --preset dev --target regression
 ```
 
 `core-summary` はコア試験のCSVから `summary.json` を生成する。
