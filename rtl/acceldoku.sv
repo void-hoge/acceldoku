@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 // Little-endian 64-byte records: ID[63:0], status[71:64], cells[395:72].
 // Input status is ignored. Output status: 0 solved / 1 unsat / 2 invalid.
-module fades #(
+module acceldoku #(
     parameter integer CORES = 6,
     parameter integer INFLIGHT_LIMIT = 2,
     parameter integer FIFO_DEPTH = 64
@@ -156,7 +156,7 @@ module fades #(
     end
     for (genvar g = 0; g < CORES; g = g+1) begin : solvers
         /* verilator lint_off PINCONNECTEMPTY */
-        fades_core solver (
+        acceldoku_core solver (
             .clk(core_clk), .reset(core_reset), .enable(enable),
             .input_valid(core_valid[g]), .input_ready(core_ready[g]),
             .input_candidates(candidates), .result_valid(result_valid[g]),

@@ -1,5 +1,5 @@
 # Helpers declare only tool mechanics; each test owns its sources and outputs.
-function(fades_iverilog name top)
+function(acceldoku_iverilog name top)
     cmake_parse_arguments(TEST "" "" "SOURCES;OPTIONS" ${ARGN})
     set(output "${CMAKE_CURRENT_BINARY_DIR}/${name}.vvp")
     add_custom_command(OUTPUT "${output}"
@@ -12,7 +12,7 @@ function(fades_iverilog name top)
     set_tests_properties(${name} PROPERTIES LABELS "${suite}" TIMEOUT 120)
 endfunction()
 
-function(fades_formal name top)
+function(acceldoku_formal name top)
     list(TRANSFORM ARGN PREPEND "\"")
     list(TRANSFORM ARGN APPEND "\"")
     string(JOIN " " sources ${ARGN})

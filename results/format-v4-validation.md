@@ -17,13 +17,13 @@ Date: 2026-11-13 (development machine).
 Commands:
 
 ```sh
-cmake --preset host -DFADES_CORES=6
+cmake --preset host -DACCELDOKU_CORES=6
 cmake --build --preset host --parallel 4
-ctest --preset host -L '^(fades|fades_axi)$' --output-on-failure
+ctest --preset host -L '^(acceldoku|acceldoku_axi)$' --output-on-failure
 ```
 
-All 7 tests passed: lint-fades, lint-fades_axi, lint-fades_kv260,
-fades, fades-hard, problem-preprocessor, axi.
+All 7 tests passed: lint-acceldoku, lint-acceldoku_axi, lint-acceldoku_kv260,
+acceldoku, acceldoku-hard, problem-preprocessor, axi.
 Integration tests include all 49,158 17-clue puzzles, the hard dataset,
 invalid/unsatisfiable inputs, backpressure, reset/restart, nonzero input
 status, and every reserved input bit set.
@@ -31,7 +31,7 @@ status, and every reserved input bit set.
 ## Board build and deployment
 
 ```sh
-cmake --preset kv260-pl -DFADES_CORES=6 -DFADES_VIVADO_JOBS=2
+cmake --preset kv260-pl -DACCELDOKU_CORES=6 -DACCELDOKU_VIVADO_JOBS=2
 cmake --build --preset kv260-pl
 ```
 
@@ -43,15 +43,15 @@ cmake --build --preset kv260-pl
 - Assigned rates: DMA 187,500,000 Hz, core 115,384,615 Hz.
 - Linux debugfs rates observed on this boot: `pl0_ref` 166,666,665 Hz,
   `pl1_ref` 111,111,110 Hz. This is a functional test, not a throughput measurement.
-- Board workspace: `/root/fades/format-v4/`.
+- Board workspace: `/root/acceldoku/format-v4/`.
 - Driver built natively against the running kernel headers.
-- Loaded app `fades`, confirmed with `xmutil listapps` and `/dev/fades`.
+- Loaded app `acceldoku`, confirmed with `xmutil listapps` and `/dev/acceldoku`.
 
 ## Board tests
 
 ```sh
-python3 /root/fades/format-v4/host/tests/check_abi.py
-python3 /root/fades/format-v4/host/tests/check_stream.py
+python3 /root/acceldoku/format-v4/host/tests/check_abi.py
+python3 /root/acceldoku/format-v4/host/tests/check_stream.py
 ```
 
 ```text

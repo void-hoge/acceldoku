@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 // Measure the unchanged core with the same once-preprocessed input supplied
 // by the shared stream pipeline. Preprocessing is outside the measured core.
-module fades_core_preprocessed (
+module acceldoku_core_preprocessed (
     input wire clk, reset, enable,
     input wire input_valid,
     output wire input_ready,
@@ -18,5 +18,5 @@ module fades_core_preprocessed (
 );
     wire [728:0] preprocessed_candidates;
     naked_single_preload preprocess(input_candidates, preprocessed_candidates);
-    fades_core core(.input_candidates(preprocessed_candidates), .*);
+    acceldoku_core core(.input_candidates(preprocessed_candidates), .*);
 endmodule

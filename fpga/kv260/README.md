@@ -1,8 +1,8 @@
 # KV260 ボード実装
 
-FPGA アプリは **`fades`**、Linux デバイスは **`/dev/fades`**、
-Linux モジュールは **`fades.ko`**。既定構成は6コア / 約115.385 MHz、DMA / AXI-Liteは187.5 MHz。
-`FADES_CORES` で1〜6コアを指定できる。
+FPGA アプリは **`acceldoku`**、Linux デバイスは **`/dev/acceldoku`**、
+Linux モジュールは **`acceldoku.ko`**。既定構成は6コア / 約115.385 MHz、DMA / AXI-Liteは187.5 MHz。
+`ACCELDOKU_CORES` で1〜6コアを指定できる。
 
 ## ハードウェア
 
@@ -24,7 +24,7 @@ Linux モジュールは **`fades.ko`**。既定構成は6コア / 約115.385 MH
 |`scripts/build.tcl`|回路生成から実装・検査・firmware出力まで|
 |`scripts/export.tcl`|`build.tcl`から呼ばれる。実装済み回路の検査とfirmware/XSA出力|
 |`constraints/clocks.xdc.in` / `scripts/configuration.tcl.in`|CMakeの共通クロック設定から生成する制約とPS設定|
-|`rtl/fades_kv260.sv`|IP Integratorとリポジトリ直下の`rtl/fades_axi.sv`を接続するラッパー|
+|`rtl/acceldoku_kv260.sv`|IP Integratorとリポジトリ直下の`rtl/acceldoku_axi.sv`を接続するラッパー|
 |`overlay.dts.in`|LinuxにDMA・IRQ・クロック・制御レジスターを教えるDevice Treeのテンプレート|
 |`shell.json`|`xmutil`がFPGAアプリを認識するための定義|
 
@@ -33,7 +33,7 @@ Linux モジュールは **`fades.ko`**。既定構成は6コア / 約115.385 MH
 `scripts/export.tcl` 内の出力検査に記載する。
 
 Vivado 2024.2のmodule-referenceはSystemVerilog型の入口を受け付けないため、
-Verilog互換構文だけの`fades_kv260.sv`に限り、生成時の`FILE_TYPE`をVerilogに指定する。
+Verilog互換構文だけの`acceldoku_kv260.sv`に限り、生成時の`FILE_TYPE`をVerilogに指定する。
 下位の推論・探索・供給回路はSystemVerilogとして扱う。
 
 ## 開発機で生成
@@ -43,11 +43,11 @@ Verilog互換構文だけの`fades_kv260.sv`に限り、生成時の`FILE_TYPE`�
 Vivado 配下の XilinxBoardStore を参照するため、Vivado の環境を設定しておく。
 
 ```sh
-cmake --preset kv260-pl -DFADES_CORES=6 -DFADES_VIVADO_JOBS=2
+cmake --preset kv260-pl -DACCELDOKU_CORES=6 -DACCELDOKU_VIVADO_JOBS=2
 cmake --build --preset kv260-pl
 ```
 
-`FADES_CORES` は既定6、対応範囲は1〜6。ボードトップ→AXI制御→コア群へ伝播する。
+`ACCELDOKU_CORES` は既定6、対応範囲は1〜6。ボードトップ→AXI制御→コア群へ伝播する。
 単一コアもこの実装経路を使う。ABIは6コア分のカウンター領域を保持し、未実装分は0。
 
 通常のbuildで回路生成・検査・firmwareパッケージまで実行する。
@@ -63,7 +63,7 @@ BDはIPごとのOOC合成ではなく一括合成し、ソルバーにも合成�
 追加のTcl実行やDevice Treeの手編集は不要。
 既定出力は `build/kv260-pl/fpga/kv260/`。configure時の `-B` で変更できる。
 `VIVADO_EXECUTABLE` と `DTC_EXECUTABLE` でツールのパスを明示指定できる。
-`FADES_VIVADO_JOBS` はVivado内部の並列数で、CMakeの `--parallel` とは独立。
+`ACCELDOKU_VIVADO_JOBS` はVivado内部の並列数で、CMakeの `--parallel` とは独立。
 
 |ターゲット|処理|
 |---|---|
@@ -80,7 +80,7 @@ BDはIPごとのOOC合成ではなく一括合成し、ソルバーにも合成�
 
 ```text
 build/kv260-pl/fpga/kv260/
-  firmware/fades/       fades.bit.bin, fades.dtbo, shell.json
+  firmware/acceldoku/       acceldoku.bit.bin, acceldoku.dtbo, shell.json
   implementation/
     timing_summary.rpt   setup / hold / pulse-width と未制約経路
     utilization.rpt      LUT / FF / CLB / BRAM / URAM
@@ -88,13 +88,13 @@ build/kv260-pl/fpga/kv260/
     bus_skew.rpt         保持バス・FIFO pointer の skew
     io.rpt, drc.rpt       ファン端子と DRC
     verified_routed.dcp   検査済み checkpoint
-    fades.xsa            ハードウェア定義
+    acceldoku.xsa            ハードウェア定義
     project/             Vivado プロジェクトと詳細 runme.log
 ```
 
 ## ソースと firmware を実機へ転送
 
-リポジトリのソースと `build/kv260-pl/fpga/kv260/firmware/fades/` の内容を、
+リポジトリのソースと `build/kv260-pl/fpga/kv260/firmware/acceldoku/` の内容を、
 ユーザーが任意の方法で実機へコピーする。ソースはGitで取得してもよい。
 接続方法・転送先はユーザーが選び、ビルドシステムにはSSH接続・自動転送を含めない。
 
@@ -111,11 +111,11 @@ cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-通常のbuildで `build/kv260-ps/host/driver/src/fades.ko`、Cツール
-`build/kv260-ps/host/tools/fades_run` と、C++ライブラリー・ベンチマーク
-`build/kv260-ps/host/tools/cpp/fades_benchmark` を生成する。
+通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
+`build/kv260-ps/host/tools/acceldoku_run` と、C++ライブラリー・ベンチマーク
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` を生成する。
 モジュールは実行中カーネルに対応したヘッダーでビルドする。Vivado・RTL検証ツールは不要。
-ヘッダーを明示する場合はconfigure時に `-DFADES_KERNEL_BUILD=/path/to/headers` を指定する。
+ヘッダーを明示する場合はconfigure時に `-DACCELDOKU_KERNEL_BUILD=/path/to/headers` を指定する。
 
 ## ロードと試験
 
@@ -123,15 +123,15 @@ cmake --build --preset kv260-ps
 使用中のプログラムとmmapを閉じ、`FIRMWARE_DIR` は実際にコピーしたfirmwareのディレクトリへ変更する。
 
 ```sh
-FIRMWARE_DIR=/path/to/copied/firmware/fades
-mkdir -p /lib/firmware/xilinx/fades
-cp "$FIRMWARE_DIR"/* /lib/firmware/xilinx/fades/
-if test -d /sys/module/fades; then rmmod fades; fi
+FIRMWARE_DIR=/path/to/copied/firmware/acceldoku
+mkdir -p /lib/firmware/xilinx/acceldoku
+cp "$FIRMWARE_DIR"/* /lib/firmware/xilinx/acceldoku/
+if test -d /sys/module/acceldoku; then rmmod acceldoku; fi
 xmutil unloadapp
-xmutil loadapp fades
+xmutil loadapp acceldoku
 xmutil listapps
-insmod build/kv260-ps/host/driver/src/fades.ko
-ls -l /dev/fades
+insmod build/kv260-ps/host/driver/src/acceldoku.ko
+ls -l /dev/acceldoku
 python3 host/tests/check_abi.py
 python3 host/tests/check_poll_stop.py
 python3 host/tests/check_stream.py
@@ -144,7 +144,7 @@ ABI v9 は面数設定・個別mmap後、STREAMONで容量16,384問を設定し�
 出力は N 件または登録済みの処理がすべて完了した端数で区切る。
 通常の DMA packet の TLAST でキューやコアをリセットしない。
 STREAMOFF で両 DMA と全 solver/FIFO を reset してから再開始できる。
-DMA MMIO・IRQ は FADES ドライバーが直接所有し、overlay に別 DMA provider は作らない。
+DMA MMIO・IRQ は ACCELDOKU ドライバーが直接所有し、overlay に別 DMA provider は作らない。
 
 測定結果には回路・クロック・転送サイズ・計測範囲を添えて保存する。
 
@@ -163,8 +163,8 @@ U-BootでIOPLLを1.5 GHzにする試行では115.385 / 187.5 MHzで機能試験�
 終了時にPLLを戻す試行でも解決しなかったため、この方法は採用せず、
 起動スクリプトとFITを作業前の内容に戻した。再起動失敗の原因は未確定。
 
-復元元は `/root/fades/abi6/clocks/boot.scr.uimg.before-iopll` と
-`/root/fades/abi6/clocks/image.fit.before-iopll`。
+復元元は実機に保存した `boot.scr.uimg.before-iopll` と
+`image.fit.before-iopll`。
 復元後に対象ファイルとの `cmp` とSHA256の一致を確認済み。
 今回のドライバー変更にPLL操作や起動設定の変更は含めない。
 
@@ -181,5 +181,5 @@ U-BootでIOPLLを1.5 GHzにする試行では115.385 / 187.5 MHzで機能試験�
 |0x018|投入登録累積件数の上位32bit|
 |0x100〜0x2df|60個の64-bit counter、下位32bitが先|
 
-counter順は `host/driver/include/fades_ioctl.h` のコメントを参照。
+counter順は `host/driver/include/acceldoku_ioctl.h` のコメントを参照。
 クロックの異なるcounterはhandshakeで保持・採取し、全件排出後に件数を照合する。

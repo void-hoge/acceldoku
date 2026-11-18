@@ -8,7 +8,7 @@
 
 // Board conversion and solution validation for the fastdoku reference.
 namespace reference {
-extern "C" unsigned fades_fastdoku_solve(const uint8_t* input, uint8_t* output, unsigned limit);
+extern "C" unsigned acceldoku_fastdoku_solve(const uint8_t* input, uint8_t* output, unsigned limit);
 using Mask = uint16_t;
 using Board = std::array<Mask, 81>;
 constexpr Mask all = 0x1ff;
@@ -66,7 +66,7 @@ inline Result solve(const Board& board, unsigned limit = 1) {
         input[i] = static_cast<uint8_t>(std::countr_zero(board[i]) + 1);
     }
     Result result;
-    result.solutions = fades_fastdoku_solve(input.data(), output.data(), limit);
+    result.solutions = acceldoku_fastdoku_solve(input.data(), output.data(), limit);
     if (result.solutions) {
         for (unsigned i = 0; i < 81; ++i) {
             if (output[i] < 1 || output[i] > 9) throw std::runtime_error("Invalid fastdoku digit");

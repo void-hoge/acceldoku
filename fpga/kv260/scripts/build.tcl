@@ -5,7 +5,7 @@ set root [file normalize [file dirname [info script]]/../../..]
 
 source [file join [file dirname [info script]] export.tcl]
 
-set design_name fades
+set design_name acceldoku
 set out [file normalize [expr {$argc > 0 ? [lindex $argv 0] : "$root/build/kv260"}]]
 set stage [expr {$argc > 1 ? [lindex $argv 1] : "bit"}]
 set jobs [expr {$argc > 2 ? [lindex $argv 2] : 4}]
@@ -29,13 +29,13 @@ file delete -force $out/build_complete
 create_project -force $design_name $out/project -part xck26-sfvc784-2LV-c
 set_property board_part xilinx.com:kv260_som:part0:1.4 [current_project]
 set_property XPM_LIBRARIES {XPM_CDC XPM_MEMORY XPM_FIFO} [current_project]
-add_files [list $root/rtl/deduction_engine.sv $root/rtl/branch_generator.sv $root/rtl/fades_core.sv \
+add_files [list $root/rtl/deduction_engine.sv $root/rtl/branch_generator.sv $root/rtl/acceldoku_core.sv \
     $root/rtl/problem_preprocessor.sv \
-    $root/rtl/async_queue.sv $root/rtl/fades.sv $root/rtl/fades_axi.sv \
-    $root/fpga/kv260/rtl/fades_kv260.sv]
+    $root/rtl/async_queue.sv $root/rtl/acceldoku.sv $root/rtl/acceldoku_axi.sv \
+    $root/fpga/kv260/rtl/acceldoku_kv260.sv]
 # IPI 2024.2 does not accept a SystemVerilog-typed module-reference boundary.
 # This thin .sv wrapper uses only the Verilog subset; the solver RTL stays SV.
-set_property FILE_TYPE Verilog [get_files fades_kv260.sv]
+set_property FILE_TYPE Verilog [get_files acceldoku_kv260.sv]
 update_compile_order -fileset sources_1
 add_files -fileset constrs_1 $clock_xdc
 set_property PROCESSING_ORDER LATE [get_files $clock_xdc]
@@ -92,7 +92,7 @@ set_property -dict [list \
     CONFIG.c_include_mm2s_dre {0} \
     CONFIG.c_include_s2mm_dre {0}] [get_bd_cells dma]
 
-create_bd_cell -type module -reference fades_kv260 solver
+create_bd_cell -type module -reference acceldoku_kv260 solver
 set_property CONFIG.CORES $cores [get_bd_cells solver]
 set_property CONFIG.FREQ_HZ [get_property CONFIG.FREQ_HZ [get_bd_pins ps/pl_clk0]] [get_bd_pins solver/dma_clk]
 set_property CONFIG.FREQ_HZ [get_property CONFIG.FREQ_HZ [get_bd_pins ps/pl_clk1]] [get_bd_pins solver/core_clk]

@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-static void set_id(fades::PuzzleRecord &record, std::uint64_t id) {
+static void set_id(acceldoku::PuzzleRecord &record, std::uint64_t id) {
     for (unsigned i = 0; i < 8; ++i) {
         record[i] = static_cast<std::uint8_t>(id >> (8 * i));
     }
@@ -28,7 +28,7 @@ int main(int argc, char **argv) try {
     if (!file) {
         throw std::runtime_error("cannot open puzzle file");
     }
-    std::vector<fades::PuzzleRecord> inputs;
+    std::vector<acceldoku::PuzzleRecord> inputs;
     Checksum expected;
     std::string line;
     std::size_t line_number = 0;
@@ -45,7 +45,7 @@ int main(int argc, char **argv) try {
         if (result.solutions > 1) {
             throw std::runtime_error("multiple solutions at line " + std::to_string(line_number));
         }
-        fades::Puzzle input{}, output{};
+        acceldoku::Puzzle input{}, output{};
         for (unsigned i = 0; i < 81; ++i) {
             if (board[i] != reference::all) {
                 input[i] = std::countr_zero(board[i]) + 1;
@@ -54,8 +54,8 @@ int main(int argc, char **argv) try {
                 output[i] = std::countr_zero(result.first[i]) + 1;
             }
         }
-        inputs.push_back(fades::encode(0, input));
-        auto answer = fades::encode(0, output);
+        inputs.push_back(acceldoku::encode(0, input));
+        auto answer = acceldoku::encode(0, output);
         answer[8] = result.solutions ? 0 : 1;
         set_id(answer, inputs.size() - 1);
         expected.add(answer);
@@ -67,9 +67,9 @@ int main(int argc, char **argv) try {
         throw std::runtime_error("empty puzzle file");
     }
     const auto total = inputs.size();
-    constexpr auto capacity = fades::StreamDevice::batch_capacity();
+    constexpr auto capacity = acceldoku::StreamDevice::batch_capacity();
 
-    fades::StreamDevice device("/dev/fades", tx, rx);
+    acceldoku::StreamDevice device("/dev/acceldoku", tx, rx);
     ChecksumWorkers workers(threads);
     std::uint64_t submitted = 0;
     Checksum actual;
@@ -89,8 +89,8 @@ int main(int argc, char **argv) try {
     const auto begin = std::chrono::steady_clock::now();
     device.stream_on();
     while (actual.count < total) {
-        device.wait(submitted < total ? fades::WaitFor::tx | fades::WaitFor::rx
-                                      : fades::WaitFor::rx);
+        device.wait(submitted < total ? acceldoku::WaitFor::tx | acceldoku::WaitFor::rx
+                                      : acceldoku::WaitFor::rx);
         if (submitted < total) {
             if (auto batch = device.try_dequeue_tx()) {
                 fill(*batch);

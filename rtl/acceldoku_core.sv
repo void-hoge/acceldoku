@@ -2,7 +2,7 @@
 // One problem at a time; deque = pending DFS siblings followed by new problems.
 // State memory is a true dual-port synchronous RAM: port A is used for DFS
 // writes / head reads, port B for ingress. The head register mirrors RAM.
-module fades_core (
+module acceldoku_core (
     input wire clk,
     input wire reset,
     input wire enable,

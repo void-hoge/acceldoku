@@ -29,7 +29,7 @@ class ChecksumWorkers {
     ChecksumWorkers(const ChecksumWorkers &) = delete;
     ChecksumWorkers &operator=(const ChecksumWorkers &) = delete;
 
-    Checksum calculate(std::span<const fades::PuzzleRecord> records) {
+    Checksum calculate(std::span<const acceldoku::PuzzleRecord> records) {
         if (count_ == 1) {
             return chunk(records, 0);
         }
@@ -54,7 +54,7 @@ class ChecksumWorkers {
         Checksum value;
     };
 
-    Checksum chunk(std::span<const fades::PuzzleRecord> records, unsigned i) const {
+    Checksum chunk(std::span<const acceldoku::PuzzleRecord> records, unsigned i) const {
         const auto begin = records.size() * i / count_;
         const auto end = records.size() * (i + 1) / count_;
         Checksum result;
@@ -100,7 +100,7 @@ class ChecksumWorkers {
     std::vector<std::thread> threads_;
     std::mutex mutex_;
     std::condition_variable start_, done_;
-    std::span<const fades::PuzzleRecord> records_;
+    std::span<const acceldoku::PuzzleRecord> records_;
     std::size_t generation_ = 0;
     unsigned remaining_ = 0;
     bool stop_ = false;

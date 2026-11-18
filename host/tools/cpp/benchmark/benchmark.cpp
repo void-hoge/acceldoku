@@ -1,5 +1,5 @@
 #include "../stats.hpp"
-#include <fades/stream_device.hpp>
+#include <acceldoku/stream_device.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -12,12 +12,12 @@
 
 using Clock = std::chrono::steady_clock;
 
-static std::vector<fades::PuzzleRecord> load_puzzles(const char *path) {
+static std::vector<acceldoku::PuzzleRecord> load_puzzles(const char *path) {
     std::ifstream file(path);
     if (!file) {
         throw std::runtime_error("cannot open puzzle file");
     }
-    std::vector<fades::PuzzleRecord> records;
+    std::vector<acceldoku::PuzzleRecord> records;
     std::string line;
     std::size_t line_number = 0;
     while (std::getline(file, line)) {
@@ -32,7 +32,7 @@ static std::vector<fades::PuzzleRecord> load_puzzles(const char *path) {
             throw std::runtime_error("invalid puzzle length at line " +
                                      std::to_string(line_number));
         }
-        fades::Puzzle puzzle{};
+        acceldoku::Puzzle puzzle{};
         for (std::size_t i = 0; i < puzzle.size(); ++i) {
             char c = line[i];
             if (c == '.') {
@@ -44,7 +44,7 @@ static std::vector<fades::PuzzleRecord> load_puzzles(const char *path) {
                                          std::to_string(line_number));
             }
         }
-        records.push_back(fades::encode(0, puzzle));
+        records.push_back(acceldoku::encode(0, puzzle));
     }
     if (file.bad()) {
         throw std::runtime_error("cannot read puzzle file");
@@ -68,19 +68,19 @@ int main(int argc, char **argv) try {
         }
         return static_cast<unsigned>(value);
     };
-    unsigned tx = parse(argv[2], FADES_DMA_MAX_BUFFERS);
-    unsigned rx = parse(argv[3], FADES_DMA_MAX_BUFFERS);
+    unsigned tx = parse(argv[2], ACCELDOKU_DMA_MAX_BUFFERS);
+    unsigned rx = parse(argv[3], ACCELDOKU_DMA_MAX_BUFFERS);
     unsigned seconds = parse(argv[4], 3600);
     auto input = load_puzzles(argv[1]);
     const std::size_t input_size = input.size();
-    constexpr auto batch_capacity = fades::StreamDevice::batch_capacity();
+    constexpr auto batch_capacity = acceldoku::StreamDevice::batch_capacity();
     // Extend with the cyclic prefix so every full batch is one contiguous span.
     input.reserve(input_size + batch_capacity - 1);
     for (std::size_t i = 0; i < batch_capacity - 1; ++i) {
         input.push_back(input[i % input_size]);
     }
 
-    fades::StreamDevice device("/dev/fades", tx, rx);
+    acceldoku::StreamDevice device("/dev/acceldoku", tx, rx);
     std::uint64_t submitted = 0, received = 0;
     std::size_t position = 0;
     auto fill = [&](std::uint32_t index) {
@@ -98,7 +98,7 @@ int main(int argc, char **argv) try {
     device.stream_on();
     bool feeding = true;
     while (feeding || received < submitted) {
-        device.wait(feeding ? fades::WaitFor::tx | fades::WaitFor::rx : fades::WaitFor::rx);
+        device.wait(feeding ? acceldoku::WaitFor::tx | acceldoku::WaitFor::rx : acceldoku::WaitFor::rx);
         if (Clock::now() >= deadline) {
             feeding = false;
         }
