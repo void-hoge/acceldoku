@@ -165,6 +165,17 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+On the KV260, build with the `kv260-ps` preset, make `/dev/acceldoku` available, and close any other programs using the device.
+Run the host tests from the repository root:
+
+```sh
+cmake --preset kv260-ps
+cmake --build --preset kv260-ps
+ctest --preset kv260-ps
+```
+
+These tests cover DMA ring operation, driver ownership and mapping lifetime, stop notifications, the C++ API, and text input conversion. Device tests run serially. The text input test also runs in GitHub Actions alongside the CPU reference and RTL tests. See [host/README.md](host/README.md) and [sim/README.md](sim/README.md) for details.
+
 ## License
 
 - MIT
