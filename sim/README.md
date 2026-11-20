@@ -30,7 +30,7 @@ It also tests unsolvable puzzles, invalid cell values, full queues, output stall
 The Verilator queue is a 64-entry abstract model and does not reproduce the XPM FWFT stage or initialization latency cycle by cycle.
 The properties of the XPM-based queue are therefore also tested with xsim.
 
-The `lint`, `synth`, `formal`, and `fifo-test` build targets can also be used to run the corresponding checks.
+The `lint`, `synth`, and `formal` build targets can also be used to run the corresponding checks. The `fifo-test` target is available when `xvlog` is found.
 
 ## Output and cycle regression
 

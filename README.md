@@ -51,7 +51,9 @@ The deduction engine applies the Singles and Locked Candidates rules across the 
 Repeated application of these rules to the candidate matrix produces chains of deductions.
 
 New puzzles are supplied to the deduction engine through a BRAM-based deque used as a queue.
-When deduction stalls, the engine selects an unresolved cell with the fewest candidates and splits its candidate bits into two sets. It continues deduction on one set immediately and pushes the other onto the front of the deque.
+When deduction stalls, the engine selects an unresolved cell and splits its candidate bits into two sets.
+It continues deduction on one set immediately and pushes the other onto the front of the deque.
+
 On a contradiction, it discards the current candidate matrix and takes another state from the front of the deque.
 When a solution is found, the remaining branches in the deque are discarded.
 
