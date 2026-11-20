@@ -97,6 +97,8 @@ cmake --build --preset kv260-ps
 
 カーネルドライバ `build/kv260-ps/host/driver/src/acceldoku.ko` に生成される。以下は `/dev/acceldoku` を使用可能にしてから実行する。
 
+実機テストはデバイスを他のプログラムが使っていない状態で `ctest --preset kv260-ps` を実行する。DMA リング、ドライバの排他・マッピング寿命、停止時の poll、C++ API とテキスト入力変換を検証する。
+
 ```sh
 # 指定秒数の連続投入。TX バッファ数、RX バッファ数、秒数を指定。
 build/kv260-ps/host/tools/acceldoku_run sim/data/17puz49158.txt 8 64 10

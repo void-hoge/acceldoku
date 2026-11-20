@@ -37,7 +37,7 @@ ctest --preset dev -L '^async_queue$'
 GitHub Actions の Host tests は push、pull request、手動実行時に Ubuntu 上で
 6コア構成の `dev` プリセットをビルドし、登録された全試験を実行する。
 Vivado がないため XPM 試験は登録されない。KV260 実機を使う
-`host/tests/` の試験は [host/README.md](../host/README.md) の手順で実行する。
+テキスト入力変換の試験も実行する。実機を使う `host/tests/` の試験は [host/README.md](../host/README.md) の手順で実行する。
 
 ## 試験一覧
 

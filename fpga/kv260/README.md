@@ -138,9 +138,7 @@ xmutil loadapp acceldoku
 xmutil listapps
 insmod build/kv260-ps/host/driver/src/acceldoku.ko
 ls -l /dev/acceldoku
-python3 host/tests/check_abi.py
-python3 host/tests/check_poll_stop.py
-python3 host/tests/check_stream.py
+ctest --preset kv260-ps
 build/kv260-ps/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
 ```
 

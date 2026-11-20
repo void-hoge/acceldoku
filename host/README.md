@@ -233,21 +233,9 @@ cmake --build --preset kv260-ps
 # 開始後の入力コピー、投入・回収、RX返却、DMA/求解、最終排出を計測に含む。
 build/kv260-ps/host/tools/acceldoku_run sim/data/17puz49158.txt 8 64 10
 build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
-
-python3 host/tests/check_abi.py
-python3 host/tests/check_poll_stop.py
-python3 host/tests/check_stream.py --tx 1 --rx 1
-python3 host/tests/check_stream.py --tx 8 --rx 64
-python3 host/tests/check_stream.py --tx 65 --rx 65
-python3 host/tests/check_example.py build/kv260-ps/host/tools/acceldoku_run \
-    --corpus sim/data/17puz49158.txt --seconds 5 --repeat 3
-
-# C++ API の変換・所有権・停止再開を実機で確認
-c++ -std=c++20 -O2 -D_FILE_OFFSET_BITS=64 \
-    -Ihost/lib/include -Ihost/driver/include \
-    host/lib/src/stream_device.cpp host/tests/cpp_smoke.cpp -o /tmp/acceldoku_cpp_smoke
-/tmp/acceldoku_cpp_smoke
 ```
+
+実機テストは `/dev/acceldoku` を使用可能にし、他の利用を停止してから `ctest --preset kv260-ps` で実行する。DMA リング、ドライバの排他・マッピング寿命、停止時の poll、C++ API、テキスト入力変換を検証する。デバイスを使うテストは直列に実行される。
 
 連続投入の計測はセットアップ・ファイル読み込み・初回の入力コピーと投入・出力内容の検証を含まない。
 アプリは現行ヘッダーでビルドする。v7からは `STREAMOFF` のioctl番号とABI番号が変更され、

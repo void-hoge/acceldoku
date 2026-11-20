@@ -26,3 +26,5 @@ jobs:
         run: cmake --build --preset dev --parallel 2
       - name: Test
         run: ctest --preset dev
+      - name: Test host text input
+        run: python3 host/tests/check_text_input.py

@@ -20,7 +20,7 @@
     {
       "name": "kv260-ps", "inherits": "base",
       "displayName": "KV260 software and kernel module (native build)",
-      "cacheVariables": { "ACCELDOKU_PROFILE": "kv260-ps" }
+      "cacheVariables": { "ACCELDOKU_PROFILE": "kv260-ps", "BUILD_TESTING": "ON" }
     },
     {
       "name": "kv260-pl", "inherits": "base",
@@ -34,6 +34,7 @@
     { "name": "kv260-ps", "configurePreset": "kv260-ps" }
   ],
   "testPresets": [
-    { "name": "dev", "configurePreset": "dev", "output": { "outputOnFailure": true } }
+    { "name": "dev", "configurePreset": "dev", "output": { "outputOnFailure": true } },
+    { "name": "kv260-ps", "configurePreset": "kv260-ps", "output": { "outputOnFailure": true } }
   ]
 }
