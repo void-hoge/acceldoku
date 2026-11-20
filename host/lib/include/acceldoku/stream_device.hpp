@@ -163,9 +163,10 @@ class StreamDevice {
     std::span<const PuzzleRecord> read_rx(std::uint32_t index) const;
 
     /**
-     * @brief Submit the last successfully written TX records.
+     * @brief Submit the last successfully written TX records, or return an empty buffer.
      * @param index Borrowed TX buffer index.
-     * @throws std::invalid_argument If no records were written or the last write was empty.
+     * @details If no records were written or the last write was empty, return the buffer
+     * without submitting it to DMA. Such a return does not generate a poll notification.
      * @post On success the buffer is no longer borrowed; on failure it remains borrowed.
      */
     void enqueue_tx(std::uint32_t index);
@@ -176,12 +177,6 @@ class StreamDevice {
      * @post On success the buffer is no longer borrowed; on failure it remains borrowed.
      */
     void enqueue_rx(std::uint32_t index);
-
-    /**
-     * @brief Return a TX buffer without sending it.
-     * @param index Borrowed TX buffer index.
-     */
-    void release_tx(std::uint32_t index);
 
     /**
      * @brief Wait for a kernel completion notification in any selected direction.

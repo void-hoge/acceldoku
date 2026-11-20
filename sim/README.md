@@ -1,99 +1,60 @@
-# RTL・参照実装の検証
+# RTL and reference implementation verification
 
-テストは目的別のディレクトリにまとめ、各 `CMakeLists.txt` がソース・生成物・
-実行条件を定義する。他の試験のコードや生成物には依存しない。
-CPU照合には `reference/sudoku.hpp` の変換・検証を通して fastdoku を使う。
-任意の候補マスクによる矛盾や探索は、コア・推論エンジンの有向試験で検証する。
+CPU reference comparisons use fastdoku through the data conversion and validation in `reference/sudoku.hpp`.
+Directed tests for the core and deduction engine verify contradiction detection and search with arbitrary candidate masks.
 
-## 実行
+## Running tests
 
-必要ツール: CMake 3.25以降、Ninja、C++20、Rust / Cargo、Python 3、Icarus Verilog、Verilator、Yosys。
-実XPMの試験にはVivado 2024.2のxsimを使う。
-初回は `git submodule update --init --recursive` で fastdoku を取得する。
-Cargo はシミュレーションをビルドするときに C ABI ラッパーを静的ライブラリーとしてビルドする。
-ARM64 では fastdoku の NEON バックエンドが有効になる。
+The XPM test uses Vivado 2026.1 xsim.
+The number of cores in the integration test can be changed with, for example, `-DACCELDOKU_CORES=1` (default: 6).
 
-```sh
-cmake --preset host -DACCELDOKU_CORES=6
-cmake --build --preset host
-ctest --preset host
-ctest --preset host -L '^acceldoku_core$'
-ctest --preset host -L '^acceldoku$'
-ctest --preset host -L '^async_queue$'
-```
+The XPM test is not registered if `xvlog` is absent from `PATH` and `$XILINX_VIVADO/bin`.
+It can be specified explicitly with `-DXVLOG_EXECUTABLE=/tools/Xilinx/2026.1/Vivado/bin/xvlog`.
+The puzzle corpus can be changed with `-DACCELDOKU_DATASET=/absolute/path/to/dataset.txt`.
 
-`host` はC++ツールとRTLシミュレーションをまとめてビルドし、ドライバーは生成しない。
-ラベルは `sim/` のディレクトリ名と同じで、検証対象を指定すると、その対象の試験をまとめて実行する。
-`-L` は正規表現なので `^...$` で完全一致を指定する。
-ラベルを省略するとCPU参照試験も含めた登録済みの全試験を実行する。
-`ctest --preset host -N` で一覧を表示し、`-R` で個別の試験名を選ぶこともできる。
-1コア構成は `-DACCELDOKU_CORES=1`。並存させる場合は `-B build/host-1core` 等で
-出力先を変え、build/CTestにもそのディレクトリを指定する。
-コア数を同じ出力先で変更した場合も、再configure・buildで生成コードを更新する。
+## Tests
 
-`xvlog` がPATH上または `$XILINX_VIVADO/bin` にない場合、XPM試験は登録しない。
-`-DXVLOG_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/xvlog` で明示指定できる。
-問題集は `-DACCELDOKU_DATASET=/absolute/path/to/dataset.txt` で変更可能。
+| Directory / label  | Tests                                                                                      | Coverage                                                                                                                                                                                 |
+|--------------------|--------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `deduction_engine` | `deduction-engine`, `formal-deduction-engine`, `formal-row-changes`, `formal-locked-masks` | Singles, Locked Candidates, deduction steps, and equivalence of deduction, row changes, and shared masks to independent specifications                                                   |
+| `branch_generator` | `branch-generator`, `formal-branch-generator`                                              | Directed candidate-splitting tests and equivalence to an independent sequential specification                                                                                            |
+| `acceldoku_core`   | `acceldoku-core`, `synth-core`, `lint-acceldoku_core`                                      | Single-core CPU comparisons, search, backtracking, ordering, stalls, queue wraparound, reset, cycle counts, structural synthesis, and lint                                               |
+| `acceldoku`        | `acceldoku`, `lint-acceldoku`                                                              | Integration of `ACCELDOKU_CORES` cores with dispatch, ID management, collection, and asynchronous queues; lint                                                                           |
+| `acceldoku_axi`    | `axi`, `lint-acceldoku_axi`, `lint-acceldoku_kv260`                                        | Independent AXI-Lite AW/W acceptance, WSTRB, response stalls, configuration protection, snapshots, zero counters for unimplemented cores, and lint of the AXI boundary and board wrapper |
+| `async_queue`      | `async-queue-xpm`                                                                          | Full and count signals, wraparound, stalls, and reset with the Xilinx asynchronous FIFO model (Vivado xsim)                                                                              |
+| `reference`        | `reference-dataset`                                                                        | Basic CPU reference and input format tests, and existence and uniqueness of solutions across the corpus                                                                                  |
 
-GitHub Actions の Host tests は push、pull request、手動実行時に Ubuntu 上で
-6コア構成の `host` プリセットをビルドし、登録された全試験を実行する。
-Vivado がないため XPM 試験は登録されない。KV260 実機を使う
-`host/tests/` の試験は [host/README.md](../host/README.md) の手順で実行する。
+The core, integration, and CPU reference tests use 49,158 puzzles by default; the core test also uses 4,096 stress inputs.
+The integration test does not cover the entire board, including AXI-Lite control, PS, and DMA.
+It also tests unsolvable puzzles, invalid cell values, full queues, output stalls, and resets with partial inputs or uncollected outputs.
+The Verilator queue is a 64-entry abstract model and does not reproduce the XPM FWFT stage or initialization latency cycle by cycle.
+The properties of the XPM-based queue are therefore also tested with xsim.
 
-## 試験一覧
+The `lint`, `synth`, and `formal` build targets can also be used to run the corresponding checks. The `fifo-test` target is available when `xvlog` is found.
 
-| ディレクトリ／ラベル | 試験名 | 検証対象・目的 |
-|----------------------|--------|----------------|
-| `deduction_engine` | `deduction-engine`、`formal-deduction-engine`、`formal-row-changes`、`formal-locked-masks` | Singles、Locked Candidates、推論ステップ、推論・行変化・共通マスクと独立仕様の等価性 |
-| `branch_generator` | `branch-generator`、`formal-branch-generator` | 候補分割の有向試験・独立逐次仕様との等価性 |
-| `acceldoku_core` | `acceldoku-core`、`synth-core`、`lint-acceldoku_core` | コア1個のCPU照合・探索・バックトラック・順序・停止・キュー周回・reset・サイクル集計、構造合成、lint |
-| `acceldoku` | `acceldoku`、`lint-acceldoku` | `ACCELDOKU_CORES` 個のコア群と供給・ID管理・回収・非同期キューの統合試験、lint |
-| `acceldoku_axi` | `axi`、`lint-acceldoku_axi`、`lint-acceldoku_kv260` | AXI-LiteのAW/W独立受理・WSTRB・応答停止・設定保護・snapshot・未実装コアのカウンター0、AXI境界とボードラッパーのlint |
-| `async_queue` | `async-queue-xpm` | Xilinx提供の非同期FIFOモデルでfull/count・周回・停止・resetを検証（Vivado xsim） |
-| `reference` | `reference-dataset` | CPU参照実装・入力形式の基本試験と、全問題集の解の存在・一意性 |
+## Output and cycle regression
 
-コア・統合・CPU参照試験は既定の全49,158問を使い、コア試験には追加4,096件のストレス入力がある。
-`acceldoku-core` のDUTは常に単一の `acceldoku_core`。`acceldoku` のDUTは既定6コアの `acceldoku` 全体で、
-`ACCELDOKU_CORES` でコア数を変更できる。AXI-Lite制御やPS・DMAを含むボード全体は含まない。
-統合試験は解なし・不正セル・満杯・出力停止・部分入力と未回収出力のresetも検証する。
-Verilator用キューは64エントリの抽象モデル。XPMのFWFT段・初期化レイテンシは
-cycle単位では再現しないため、実キューの性質をxsimでも確認する。
-
-`lint`、`synth`、`formal`、`fifo-test` のビルドターゲットから該当検査を実行することもできる。
-ホスト試験は [host/README.md](../host/README.md) を参照。
-
-## 出力・サイクル回帰
-
-生成物は選択したビルドディレクトリの `sim/<試験ディレクトリ>/` に置く。
-各試験の作業ディレクトリも独立している。
-
-コア試験は `sim/acceldoku_core/` に `results.csv` と
-`results.csv.totals.json` を生成する。CSVは問題ごとの完了間隔、totalsは最後の出力排出を含む全体値。
+Artifacts are placed in `sim/<test-directory>/` under the selected build directory.
+The core test generates `results.csv` and `results.csv.totals.json` in `sim/acceldoku_core/`.
+The CSV records completion intervals for individual puzzles; the totals file records overall values through collection of the final output.
 
 ```sh
-ctest --preset host -L '^acceldoku_core$'
-cmake --build --preset host --target core-summary
+ctest --preset dev -L '^acceldoku_core$'
+cmake --build --preset dev --target core-summary
 
-cmake --preset host -DACCELDOKU_BASELINE=/absolute/path/to/saved/results.csv
-cmake --build --preset host --target regression
+cmake --preset dev -DACCELDOKU_BASELINE=/absolute/path/to/saved/results.csv
+cmake --build --preset dev --target regression
 ```
 
-`core-summary` はコア試験のCSVから `summary.json` を生成する。
-`regression` はベースラインの指定時に有効になり、49,158問+4,096件のCSVとtotalsの
-完全一致を確認する。ベースラインは両ファイルを保存すること。
+`core-summary` generates `summary.json` from the core test CSV.
+`regression` is enabled when a baseline is specified and checks for an exact match of the CSV and totals for 49,158 puzzles plus 4,096 stress inputs.
+Save both files for the baseline.
 
-単一コアのHWはボード実装を `ACCELDOKU_CORES=1` で生成する。
-詳細は [KV260ビルド手順](../fpga/kv260/README.md)。
+## Puzzle corpora
 
-## 問題集
+Each puzzle occupies one line of 81 characters, with cells in row-major order. Empty cells are represented by `.`, and clues by `1`-`9`.
 
-`data/` の2ファイルはBinarySudokuの原本で、ファイル名・内容・CRLFを保持する。
-1行81文字、空欄 `.`、ヒント `1`〜`9`、行優先。
-
-| ファイル                    | 問題数 | 用途                               |
-|-----------------------------|-------:|------------------------------------|
-| `17puz49158.txt`            | 49,158 | 17ヒント集合、試験と測定の既定入力 |
-| `HardestDatabase110626.txt` |    375 | 探索負荷の大きい難問集合           |
-
-出所: [BinarySudoku problems/9x9](https://github.com/void-hoge/binarysudoku/tree/a494907924083cbfc9e14a74c75f614ead752c28/problems/9x9)
-（commit `a494907924083cbfc9e14a74c75f614ead752c28`）。`.gitattributes` で原本の改行を維持する。
+| File                        | Puzzles | Purpose                                  |
+|-----------------------------|--------:|------------------------------------------|
+| `17puz49158.txt`            |  49,158 | Default input for tests and measurements |
+| `HardestDatabase110626.txt` |     375 | Hard puzzle corpus                       |

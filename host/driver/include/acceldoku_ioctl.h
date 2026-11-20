@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/* SPDX-License-Identifier: MIT */
 #ifndef ACCELDOKU_IOCTL_H
 #define ACCELDOKU_IOCTL_H
 

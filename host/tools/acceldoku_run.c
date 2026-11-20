@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Processes raw 64-byte records; see host/README.md.
+ * Processes text puzzles; see host/README.md.
  * Copies input and updates IDs for the specified duration, counting results without reading them.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -14,7 +14,6 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #ifdef __aarch64__
@@ -188,34 +187,61 @@ static void fill(uint8_t *dst, const uint8_t *src, size_t records, size_t *posit
     }
 }
 
-static uint8_t *load_input(const char *path, size_t *records) {
+static uint8_t *load_text(const char *path, size_t *records) {
     FILE *in = fopen(path, "rb");
-    struct stat st;
-    if (!in || fstat(fileno(in), &st)) {
+    if (!in) {
         fail("input");
     }
-    if (st.st_size <= 0 || st.st_size % 64 || (uint64_t)st.st_size > SIZE_MAX) {
-        fprintf(stderr, "Input must contain complete 64-byte records\n");
+    char *line = NULL;
+    size_t line_capacity = 0, count = 0, capacity = 0, line_number = 0;
+    uint8_t *source = NULL;
+    ssize_t length;
+    while ((length = getline(&line, &line_capacity, in)) >= 0) {
+        line_number++;
+        size_t begin = 0, end = (size_t)length;
+        while (begin < end && (line[begin] == ' ' || line[begin] == '\t' || line[begin] == '\r' || line[begin] == '\n')) begin++;
+        while (end > begin && (line[end - 1] == ' ' || line[end - 1] == '\t' || line[end - 1] == '\r' || line[end - 1] == '\n')) end--;
+        if (begin == end || line[begin] == '#') continue;
+        if (end - begin != 81) {
+            fprintf(stderr, "Invalid puzzle length at line %zu\n", line_number);
+            exit(EXIT_FAILURE);
+        }
+        uint8_t record[64] = {0};
+        for (size_t i = 0; i < 81; i++) {
+            char c = line[begin + i];
+            if (c != '.' && (c < '0' || c > '9')) {
+                fprintf(stderr, "Invalid puzzle character at line %zu\n", line_number);
+                exit(EXIT_FAILURE);
+            }
+            unsigned value = c == '.' ? 0 : (unsigned)(c - '0');
+            record[9 + i / 2] |= (uint8_t)(value << (4 * (i % 2)));
+        }
+        if (count == capacity) {
+            if (capacity > SIZE_MAX / 2 / 64) {
+                fprintf(stderr, "Too many puzzles\n");
+                exit(EXIT_FAILURE);
+            }
+            capacity = capacity ? capacity * 2 : 256;
+            uint8_t *grown = realloc(source, capacity * 64);
+            if (!grown) fail("malloc input");
+            source = grown;
+        }
+        memcpy(source + count++ * 64, record, 64);
+    }
+    if (ferror(in)) fail("read input");
+    free(line);
+    if (fclose(in)) fail("close input");
+    if (!count) {
+        fprintf(stderr, "Empty puzzle file\n");
         exit(EXIT_FAILURE);
     }
-    size_t bytes = (size_t)st.st_size;
-    uint8_t *source = malloc(bytes);
-    if (!source) {
-        fail("malloc input");
-    }
-    if (fread(source, 1, bytes, in) != bytes) {
-        fail("read input");
-    }
-    if (fclose(in)) {
-        fail("close input");
-    }
-    *records = bytes / 64;
+    *records = count;
     return source;
 }
 
 int main(int argc, char **argv) {
     if (argc != 5) {
-        fprintf(stderr, "Usage: %s INPUT.raw TX_BUFFERS RX_BUFFERS SECONDS\n", argv[0]);
+        fprintf(stderr, "Usage: acceldoku_run INPUT TX_BUFFERS RX_BUFFERS SECONDS\n");
         return EXIT_FAILURE;
     }
     char *end = NULL;
@@ -225,7 +251,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     size_t records;
-    uint8_t *source = load_input(argv[1], &records);
+    uint8_t *source = load_text(argv[1], &records);
 
     struct acceldoku_device device = {
         .fd = -1,

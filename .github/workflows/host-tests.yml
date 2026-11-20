@@ -21,8 +21,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build python3 iverilog verilator yosys
       - name: Configure
-        run: cmake --preset host -DACCELDOKU_CORES=6
+        run: cmake --preset dev -DACCELDOKU_CORES=6
       - name: Build
-        run: cmake --build --preset host --parallel 2
+        run: cmake --build --preset dev --parallel 2
       - name: Test
-        run: ctest --preset host
+        run: ctest --preset dev
+      - name: Test host text input
+        run: python3 host/tests/check_text_input.py
