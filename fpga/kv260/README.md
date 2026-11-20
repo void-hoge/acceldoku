@@ -38,7 +38,7 @@ Verilog互換構文だけの`acceldoku_kv260.sv`に限り、生成時の`FILE_TY
 
 ## 開発機で生成
 
-必要ツールはCMake 3.25以降、Ninja、Vivado 2024.2とK26デバイスサポート、`dtc`。
+必要ツールはCMake 3.25以降、Ninja、Vivado 2026.1とK26デバイスサポート、`dtc`。
 リポジトリルートで実行する。
 Vivado 配下の XilinxBoardStore を参照するため、Vivado の環境を設定しておく。
 
@@ -118,7 +118,8 @@ cmake --build --preset kv260-ps
 
 通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run` と、C++ライブラリー・ベンチマーク
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` と `acceldoku_verify` を生成する。
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、`acceldoku_oneshot`、
+`acceldoku_verify` を生成する。
 モジュールは実行中カーネルに対応したヘッダーでビルドする。Vivado・RTL検証ツールは不要。
 ヘッダーを明示する場合はconfigure時に `-DACCELDOKU_KERNEL_BUILD=/path/to/headers` を指定する。
 

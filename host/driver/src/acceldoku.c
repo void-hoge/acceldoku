@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: MIT
 // Exclusive queued management of the solver and AXI DMA SG engine.
 #include <linux/clk.h>
 #include <linux/delay.h>
@@ -844,5 +844,6 @@ static struct platform_driver acceldoku_driver = {
 };
 
 module_platform_driver(acceldoku_driver);
-MODULE_LICENSE("GPL");
+/* MIT source permits GPL-compatible use with the Linux kernel. */
+MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("ACCELDOKU queued solver and dedicated AXI DMA SG driver");

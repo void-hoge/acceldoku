@@ -10,6 +10,7 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 | `lib/include/acceldoku/stream_device.hpp` / `lib/src/stream_device.cpp` | C++ API と実装 |
 | `tools/acceldoku_run.c` | ioctl を直接使う C ベンチマーク |
 | `tools/cpp/benchmark/benchmark.cpp` | `StreamDevice` を使う C++ ベンチマーク |
+| `tools/cpp/oneshot.cpp` | 全問題を事前投入するワンショットベンチマーク |
 | `tools/cpp/verify/` | fastdoku と出力チェックサムを比較する固定件数検証 |
 | `tests/` | ABI、ストリーム、停止通知、C++ API の実機試験 |
 
@@ -91,6 +92,21 @@ build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 1
 入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
 ベンチマークは計測前に変換して初期 TX を投入し、その後は入力を反復コピーし ID を更新する。
 結果は件数のみ数え、計測には開始・継続コピー、投入・回収、求解と最終排出を含む。
+
+### ワンショットの性能測定
+
+```sh
+build/kv260-ps/host/tools/cpp/acceldoku_oneshot sim/data/17puz49158.txt
+```
+
+入力の各問題を一度だけ投入する。空行と `#` コメントを除き、各行は81セル
+（空セルは `.` または `0`）。TX/RX の面数は問題数から自動決定し、全問題の TX と
+全結果の RX をそれぞれ保持する。TX へのコピー・ID付与・投入は計測前に完了する。
+計測範囲は `stream_on()` の直前から全結果を回収するまでで、RXの投入、DMA、求解、
+RXの完了待ち・回収を含む。結果の内容は読まず、件数とHW統計を照合する。
+入力変換、統計取得、`stream_off()` は計測に含まない。
+1面は16,384問で、各方向の上限は4,096面。TXとRXで合計
+`2 × ceil(問題数 / 16,384) MiB` のDMAバッファーを使う。
 
 ### 固定件数の検証
 
@@ -219,7 +235,8 @@ cmake --build --preset kv260-ps
 
 `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark` と `acceldoku_verify` が生成される。
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、`acceldoku_oneshot`、
+`acceldoku_verify` が生成される。
 
 以下は `/dev/acceldoku` を利用できる状態で実行する。Cツールの入力は上記の64バイト
 レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、

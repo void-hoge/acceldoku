@@ -8,7 +8,7 @@ CPU照合には `reference/sudoku.hpp` の変換・検証を通して fastdoku �
 ## 実行
 
 必要ツール: CMake 3.25以降、Ninja、C++20、Rust / Cargo 1.83以降、Python 3、Icarus Verilog、Verilator、Yosys。
-実XPMの試験にはVivado 2024.2のxsimを使う。
+実XPMの試験にはVivado 2026.1のxsimを使う。
 初回は `git submodule update --init --recursive` で fastdoku を取得する。
 Cargo はシミュレーションをビルドするときに C ABI ラッパーを静的ライブラリーとしてビルドする。
 ARM64 では fastdoku の NEON バックエンドが有効になる。
@@ -31,7 +31,7 @@ ctest --preset dev -L '^async_queue$'
 コア数を同じ出力先で変更した場合も、再configure・buildで生成コードを更新する。
 
 `xvlog` がPATH上または `$XILINX_VIVADO/bin` にない場合、XPM試験は登録しない。
-`-DXVLOG_EXECUTABLE=/tools/Xilinx/Vivado/2024.2/bin/xvlog` で明示指定できる。
+`-DXVLOG_EXECUTABLE=/tools/Xilinx/2026.1/Vivado/bin/xvlog` で明示指定できる。
 問題集は `-DACCELDOKU_DATASET=/absolute/path/to/dataset.txt` で変更可能。
 
 GitHub Actions の Host tests は push、pull request、手動実行時に Ubuntu 上で
@@ -86,7 +86,7 @@ cmake --build --preset dev --target regression
 
 ## 問題集
 
-`data/` の2ファイルはBinarySudokuの原本で、ファイル名・内容・CRLFを保持する。
+次の2ファイルはBinarySudokuの原本で、ファイル名・内容・CRLFを保持する。
 1行81文字、空欄 `.`、ヒント `1`〜`9`、行優先。
 
 | ファイル                    | 問題数 | 用途                               |
@@ -96,3 +96,24 @@ cmake --build --preset dev --target regression
 
 出所: [BinarySudoku problems/9x9](https://github.com/void-hoge/binarysudoku/tree/a494907924083cbfc9e14a74c75f614ead752c28/problems/9x9)
 （commit `a494907924083cbfc9e14a74c75f614ead752c28`）。`.gitattributes` で原本の改行を維持する。
+
+### ベンチマーク用問題集
+
+fastdoku の README の性能表に掲載された問題集を、上流のファイル名に `.txt` を付けて `data/` に置く。
+コメント行と空行を含むファイルがあり、`acceldoku_oneshot` はこれらを読み飛ばす。
+
+| ファイル | 問題数 |
+|---|---:|
+| `puzzles0_kaggle.txt` | 100,000 |
+| `puzzles1_unbiased.txt` | 1,000,000 |
+| `puzzles2_17_clue.txt` | 49,158 |
+| `puzzles3_magictour_top1465.txt` | 1,465 |
+| `puzzles4_forum_hardest_1905.txt` | 2,135,371 |
+| `puzzles5_forum_hardest_1905_11+.txt` | 48,766 |
+| `puzzles6_forum_hardest_1106.txt` | 375 |
+| `puzzles7_serg_benchmark.txt` | 10,000 |
+
+tdoku のファイルは [tdoku](https://github.com/t-dillon/tdoku) の `data.zip`
+（commit `af426180dc53aef89b82868e7b3fdfcf42165654`）から取得した。
+`puzzles2_17_clue.txt` と `puzzles6_forum_hardest_1106.txt` の問題内容は、上記の
+`17puz49158.txt` と `HardestDatabase110626.txt` にそれぞれ一致する。
