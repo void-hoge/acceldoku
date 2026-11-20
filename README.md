@@ -68,7 +68,7 @@ The same deque therefore serves as both a queue for incoming puzzles and a stack
     - Vivado 2026.1 or later, with K26 device support and `dtc`
   - Verification:
     - `build-essential`
-    - Rust / Cargo 1.83
+    - Rust / Cargo 1.83 or later
     - Python 3
     - Icarus Verilog
     - Verilator
@@ -81,8 +81,14 @@ The same deque therefore serves as both a queue for incoming puzzles and a stack
   - Ninja
   - Python 3
   - Rust / Cargo 1.83 or later
+  
+The versions of `rustc` and `cargo` available via `apt` may be outdated.
+To install latest versions, use `rustup` (which is available through `apt`).
 
-Unless otherwise noted, run the following commands from the repository root on the indicated machine.
+```sh
+apt install rustup
+rustup default stable
+```
 
 ### Generate FPGA firmware
 
@@ -165,7 +171,8 @@ ctest --preset dev
 
 ### Corpora
 
-| Corpus | Puzzles | Original source and collection |
-|---|---:|---|
-| [`sim/data/17puz49158.txt`](sim/data/17puz49158.txt) | 49,158 | [dobrichev's collection](https://sites.google.com/site/dobrichev/sudoku-puzzle-collections) and [additional puzzles](http://forum.enjoysudoku.com/scan-solution-grids-for-17-clues-as-of-blue-t34012-90.html#p282968), based on Gordon Royle's 17-clue corpus. |
-| [`sim/data/HardestDatabase110626.txt`](sim/data/HardestDatabase110626.txt) | 375 | [HardestDatabase110626.txt](http://forum.enjoysudoku.com/the-hardest-sudokus-new-thread-t6539.html#p65791) from the Enjoy Sudoku forum. |
+| Corpus                                                                     | Puzzles | Original source and collection                                                                                                                                                                                                                                 |
+|----------------------------------------------------------------------------|--------:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`sim/data/17puz49158.txt`](sim/data/17puz49158.txt)                       |  49,158 | [dobrichev's collection](https://sites.google.com/site/dobrichev/sudoku-puzzle-collections) and [additional puzzles](http://forum.enjoysudoku.com/scan-solution-grids-for-17-clues-as-of-blue-t34012-90.html#p282968), based on Gordon Royle's 17-clue corpus. |
+| [`sim/data/HardestDatabase110626.txt`](sim/data/HardestDatabase110626.txt) |     375 | [HardestDatabase110626.txt](http://forum.enjoysudoku.com/the-hardest-sudokus-new-thread-t6539.html#p65791) from the Enjoy Sudoku forum.                                                                                                                        |
+|                                                                            |         |                                                                                                                                                                                                                                                                |

@@ -10,8 +10,8 @@
     </style>
   </defs>
   <rect width="1280" height="720" fill="white"/>
-  <rect x="150" y="35" width="990" height="615" class="box"/>
-  <text x="645" y="62" class="title">acceldoku_core / Solver core</text>
+  <rect x="150" y="115" width="990" height="535" class="box"/>
+  <text x="645" y="142" class="title">acceldoku_core / Solver core</text>
 
   <rect x="595" y="170" width="175" height="70" class="box"/>
   <text x="682.5" y="199">Search control</text>
