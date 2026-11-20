@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Processes raw records or text puzzles; see host/README.md.
+ * Processes text puzzles; see host/README.md.
  * Copies input and updates IDs for the specified duration, counting results without reading them.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -14,7 +14,6 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #ifdef __aarch64__
@@ -188,31 +187,6 @@ static void fill(uint8_t *dst, const uint8_t *src, size_t records, size_t *posit
     }
 }
 
-static uint8_t *load_input(const char *path, size_t *records) {
-    FILE *in = fopen(path, "rb");
-    struct stat st;
-    if (!in || fstat(fileno(in), &st)) {
-        fail("input");
-    }
-    if (st.st_size <= 0 || st.st_size % 64 || (uint64_t)st.st_size > SIZE_MAX) {
-        fprintf(stderr, "Input must contain complete 64-byte records\n");
-        exit(EXIT_FAILURE);
-    }
-    size_t bytes = (size_t)st.st_size;
-    uint8_t *source = malloc(bytes);
-    if (!source) {
-        fail("malloc input");
-    }
-    if (fread(source, 1, bytes, in) != bytes) {
-        fail("read input");
-    }
-    if (fclose(in)) {
-        fail("close input");
-    }
-    *records = bytes / 64;
-    return source;
-}
-
 static uint8_t *load_text(const char *path, size_t *records) {
     FILE *in = fopen(path, "rb");
     if (!in) {
@@ -266,13 +240,8 @@ static uint8_t *load_text(const char *path, size_t *records) {
 }
 
 int main(int argc, char **argv) {
-    int text = argc > 1 && strcmp(argv[1], "--text") == 0;
-    if (text) {
-        argc--;
-        argv++;
-    }
     if (argc != 5) {
-        fprintf(stderr, "Usage: acceldoku_run [--text] INPUT TX_BUFFERS RX_BUFFERS SECONDS\n");
+        fprintf(stderr, "Usage: acceldoku_run INPUT TX_BUFFERS RX_BUFFERS SECONDS\n");
         return EXIT_FAILURE;
     }
     char *end = NULL;
@@ -282,7 +251,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     size_t records;
-    uint8_t *source = text ? load_text(argv[1], &records) : load_input(argv[1], &records);
+    uint8_t *source = load_text(argv[1], &records);
 
     struct acceldoku_device device = {
         .fd = -1,

@@ -170,16 +170,10 @@ void StreamDevice::enqueue_tx(std::uint32_t index) {
     check_tx(index);
     const auto count = tx_record_counts_[index];
     if (!count) {
-        throw std::invalid_argument("invalid TX record count");
+        free_tx_.push_back(index);
+    } else {
+        enqueue(ACCELDOKU_QUEUE_TX, index, static_cast<unsigned>(count));
     }
-    enqueue(ACCELDOKU_QUEUE_TX, index, static_cast<unsigned>(count));
-    tx_borrowed_[index] = false;
-    tx_record_counts_[index] = 0;
-}
-
-void StreamDevice::release_tx(std::uint32_t index) {
-    check_tx(index);
-    free_tx_.push_back(index);
     tx_borrowed_[index] = false;
     tx_record_counts_[index] = 0;
 }

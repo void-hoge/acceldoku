@@ -47,9 +47,15 @@ int main() {
     assert(empty);
     device.write_tx(*empty, std::span(puzzles).first(1));
     device.write_tx(*empty, {});
-    expect_error<std::invalid_argument>([&] { device.enqueue_tx(*empty); });
-    device.release_tx(*empty);
-    expect_error<std::logic_error>([&] { device.release_tx(*empty); });
+    device.enqueue_tx(*empty);
+    expect_error<std::logic_error>([&] { device.enqueue_tx(*empty); });
+    empty = device.try_dequeue_tx();
+    assert(empty);
+    device.enqueue_tx(*empty);
+    empty = device.try_dequeue_tx();
+    assert(empty);
+    device.write_tx(*empty, {});
+    device.enqueue_tx(*empty);
 
     for (unsigned round = 0; round < 2; ++round) {
         if (round) {

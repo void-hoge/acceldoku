@@ -118,7 +118,7 @@ cmake --build --preset kv260-ps
 
 通常のbuildで `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run` と、C++ライブラリー・ベンチマーク
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、`acceldoku_oneshot`、
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、
 `acceldoku_verify` を生成する。
 モジュールは実行中カーネルに対応したヘッダーでビルドする。Vivado・RTL検証ツールは不要。
 ヘッダーを明示する場合はconfigure時に `-DACCELDOKU_KERNEL_BUILD=/path/to/headers` を指定する。

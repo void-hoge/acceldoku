@@ -100,7 +100,7 @@ cmake --build --preset dev --target regression
 ### ベンチマーク用問題集
 
 fastdoku の README の性能表に掲載された問題集を、上流のファイル名に `.txt` を付けて `data/` に置く。
-コメント行と空行を含むファイルがあり、`acceldoku_oneshot` はこれらを読み飛ばす。
+コメント行と空行を含むファイルがあり、ホストツールはこれらを読み飛ばす。
 
 | ファイル | 問題数 |
 |---|---:|

@@ -52,8 +52,8 @@ C++20 ライブラリー、ベンチマークと実機試験を収める。C/C++
 `record_id()`、`record_status()`、`decode_cells()` で出力を解釈できる。
 `write_tx(index, span)` は先頭から上書きする。`first_id` を追加するとコピー時にIDを連番で置き換える。
 `enqueue_tx(index)` は最後に正常終了した書き込みの 1..16384 件を投入する。
-書き込み前または最後の書き込みが空の場合は投入せず例外を送出する。
-送信しない TX は `release_tx(index)`、RX は `enqueue_rx(index)` で明示的に返却する。
+書き込み前または最後の書き込みが空の場合は DMA に投入せず TX を返却する。
+送信しない TX は空の書き込みの後に `enqueue_tx(index)`、RX は `enqueue_rx(index)` で返却する。
 RX の件数は `rx_size(index)`、内容は `read_rx(index)` が返すコピーなしの
 `std::span<const PuzzleRecord>` で取得する。保持する必要があれば呼び出し側でコピーする。
 ビューは `enqueue_rx(index)` の成功時またはデバイスの破棄時に無効になり、
@@ -92,21 +92,6 @@ build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 1
 入力は一行81文字の問題テキスト（空セルは `.` または `0`）。
 ベンチマークは計測前に変換して初期 TX を投入し、その後は入力を反復コピーし ID を更新する。
 結果は件数のみ数え、計測には開始・継続コピー、投入・回収、求解と最終排出を含む。
-
-### ワンショットの性能測定
-
-```sh
-build/kv260-ps/host/tools/cpp/acceldoku_oneshot sim/data/17puz49158.txt
-```
-
-入力の各問題を一度だけ投入する。空行と `#` コメントを除き、各行は81セル
-（空セルは `.` または `0`）。TX/RX の面数は問題数から自動決定し、全問題の TX と
-全結果の RX をそれぞれ保持する。TX へのコピー・ID付与・投入は計測前に完了する。
-計測範囲は `stream_on()` の直前から全結果を回収するまでで、RXの投入、DMA、求解、
-RXの完了待ち・回収を含む。結果の内容は読まず、件数とHW統計を照合する。
-入力変換、統計取得、`stream_off()` は計測に含まない。
-1面は16,384問で、各方向の上限は4,096面。TXとRXで合計
-`2 × ceil(問題数 / 16,384) MiB` のDMAバッファーを使う。
 
 ### 固定件数の検証
 
@@ -235,17 +220,18 @@ cmake --build --preset kv260-ps
 
 `build/kv260-ps/host/driver/src/acceldoku.ko`、Cツール
 `build/kv260-ps/host/tools/acceldoku_run`、C++ライブラリーと
-`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、`acceldoku_oneshot`、
+`build/kv260-ps/host/tools/cpp/acceldoku_benchmark`、
 `acceldoku_verify` が生成される。
 
-以下は `/dev/acceldoku` を利用できる状態で実行する。Cツールの入力は上記の64バイト
-レコードを連結したバイナリーファイル。両ベンチマークとも指定時間だけ連続投入し、
+以下は `/dev/acceldoku` を利用できる状態で実行する。Cツールは1行81セルの問題テキストを読む。
+空セルは `.` または `0`、空行と `#` コメント行は無視する。変換は計測前に行う。
+両ベンチマークとも指定時間だけ連続投入し、
 結果は内容を読まず件数のみ集計する。
 
 ```sh
 # 連続投入：入力集合を反復コピーし、一意IDを付与。出力内容は読まず件数だけ数える。
 # 開始後の入力コピー、投入・回収、RX返却、DMA/求解、最終排出を計測に含む。
-build/kv260-ps/host/tools/acceldoku_run input.raw 8 64 10
+build/kv260-ps/host/tools/acceldoku_run sim/data/17puz49158.txt 8 64 10
 build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
 
 python3 host/tests/check_abi.py
