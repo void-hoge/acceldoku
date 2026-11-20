@@ -8,7 +8,7 @@ These rates are respectively **5.24× and 3.65×** those of fastdoku running wit
 
 ## Results
 
-The following results compare repeated submissions using `acceldoku_benchmark` on the KV260 with [fastdoku](reference/fastdoku/README.md) on a Ryzen 7 PRO 6850U development machine.
+The following results compare repeated submissions using `acceldoku_benchmark` on the KV260 with [fastdoku](https://github.com/rocketbombs/fastdoku/blob/main/README.md) on a Ryzen 7 PRO 6850U development machine.
 Rates are in **M solves/s (million puzzles per second)**.
 
 | Corpus                            |   Puzzles | KV260 FPGA | fastdoku, 1 thread | fastdoku, 16 threads |

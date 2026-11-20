@@ -5,7 +5,6 @@ Directed tests for the core and deduction engine verify contradiction detection 
 
 ## Running tests
 
-See the [main README](../README.md#tests) for requirements and basic build and test instructions.
 The XPM test uses Vivado 2026.1 xsim.
 The number of cores in the integration test can be changed with, for example, `-DACCELDOKU_CORES=1` (default: 6).
 
@@ -15,15 +14,15 @@ The puzzle corpus can be changed with `-DACCELDOKU_DATASET=/absolute/path/to/dat
 
 ## Tests
 
-| Directory / label | Tests | Coverage |
-|-------------------|-------|----------|
-| `deduction_engine` | `deduction-engine`, `formal-deduction-engine`, `formal-row-changes`, `formal-locked-masks` | Singles, Locked Candidates, deduction steps, and equivalence of deduction, row changes, and shared masks to independent specifications |
-| `branch_generator` | `branch-generator`, `formal-branch-generator` | Directed candidate-splitting tests and equivalence to an independent sequential specification |
-| `acceldoku_core` | `acceldoku-core`, `synth-core`, `lint-acceldoku_core` | Single-core CPU comparisons, search, backtracking, ordering, stalls, queue wraparound, reset, cycle counts, structural synthesis, and lint |
-| `acceldoku` | `acceldoku`, `lint-acceldoku` | Integration of `ACCELDOKU_CORES` cores with dispatch, ID management, collection, and asynchronous queues; lint |
-| `acceldoku_axi` | `axi`, `lint-acceldoku_axi`, `lint-acceldoku_kv260` | Independent AXI-Lite AW/W acceptance, WSTRB, response stalls, configuration protection, snapshots, zero counters for unimplemented cores, and lint of the AXI boundary and board wrapper |
-| `async_queue` | `async-queue-xpm` | Full and count signals, wraparound, stalls, and reset with the Xilinx asynchronous FIFO model (Vivado xsim) |
-| `reference` | `reference-dataset` | Basic CPU reference and input format tests, and existence and uniqueness of solutions across the corpus |
+| Directory / label  | Tests                                                                                      | Coverage                                                                                                                                                                                 |
+|--------------------|--------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `deduction_engine` | `deduction-engine`, `formal-deduction-engine`, `formal-row-changes`, `formal-locked-masks` | Singles, Locked Candidates, deduction steps, and equivalence of deduction, row changes, and shared masks to independent specifications                                                   |
+| `branch_generator` | `branch-generator`, `formal-branch-generator`                                              | Directed candidate-splitting tests and equivalence to an independent sequential specification                                                                                            |
+| `acceldoku_core`   | `acceldoku-core`, `synth-core`, `lint-acceldoku_core`                                      | Single-core CPU comparisons, search, backtracking, ordering, stalls, queue wraparound, reset, cycle counts, structural synthesis, and lint                                               |
+| `acceldoku`        | `acceldoku`, `lint-acceldoku`                                                              | Integration of `ACCELDOKU_CORES` cores with dispatch, ID management, collection, and asynchronous queues; lint                                                                           |
+| `acceldoku_axi`    | `axi`, `lint-acceldoku_axi`, `lint-acceldoku_kv260`                                        | Independent AXI-Lite AW/W acceptance, WSTRB, response stalls, configuration protection, snapshots, zero counters for unimplemented cores, and lint of the AXI boundary and board wrapper |
+| `async_queue`      | `async-queue-xpm`                                                                          | Full and count signals, wraparound, stalls, and reset with the Xilinx asynchronous FIFO model (Vivado xsim)                                                                              |
+| `reference`        | `reference-dataset`                                                                        | Basic CPU reference and input format tests, and existence and uniqueness of solutions across the corpus                                                                                  |
 
 The core, integration, and CPU reference tests use 49,158 puzzles by default; the core test also uses 4,096 stress inputs.
 The integration test does not cover the entire board, including AXI-Lite control, PS, and DMA.
@@ -53,9 +52,9 @@ Save both files for the baseline.
 
 ## Puzzle corpora
 
-Each puzzle occupies one line of 81 characters, with cells in row-major order. Empty cells are represented by `.`, and clues by `1`–`9`.
+Each puzzle occupies one line of 81 characters, with cells in row-major order. Empty cells are represented by `.`, and clues by `1`-`9`.
 
-| File | Puzzles | Purpose |
-|------|--------:|---------|
-| `17puz49158.txt` | 49,158 | Default input for tests and measurements |
-| `HardestDatabase110626.txt` | 375 | Hard puzzle corpus |
+| File                        | Puzzles | Purpose                                  |
+|-----------------------------|--------:|------------------------------------------|
+| `17puz49158.txt`            |  49,158 | Default input for tests and measurements |
+| `HardestDatabase110626.txt` |     375 | Hard puzzle corpus                       |
