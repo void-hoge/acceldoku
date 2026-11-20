@@ -37,22 +37,14 @@ Measurement conditions:
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    Input[Input puzzles] --> Pre[Shared preprocessing<br/>Candidate conversion and initial propagation]
-    Pre --> Queue
-    subgraph Core[Solver core]
-        Queue[State deque<br/>BRAM] --> Current[Current state<br/>81 × 9 bits]
-        Current --> Infer[Parallel deduction<br/>Singles / Locked Candidates]
-        Infer -->|Update candidates| Current
-        Current --> Check[Check for solution, contradiction, or stall]
-        Check -->|Stall| Branch[Select cell and split candidates]
-        Branch -->|Explore one branch immediately| Current
-        Branch -->|Save the other branch| Queue
-        Check -->|Backtrack on contradiction| Queue
-    end
-    Check -->|Solved or no solution| Output[Result]
-```
+
+| ![Acceldoku accelerator block diagram](images/block_diagram.svg) |
+|:----------------------------------------------------------------:|
+| Block diagram of the accelerator                                 |
+
+| ![Solver core block diagram](images/core_block_diagram.svg) |
+|:-----------------------------------------------------------:|
+| Block diagram of an individual solver core                  |
 
 Each core solves puzzles by updating a 729-bit candidate matrix register, with nine flag bits per cell.
 The deduction engine applies the Singles and Locked Candidates rules across the entire board in parallel on every cycle.
