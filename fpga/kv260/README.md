@@ -25,6 +25,64 @@ The constrained periods are **8.666 ns** and **5.333 ns**, respectively, rounded
 `VIVADO_EXECUTABLE` and `DTC_EXECUTABLE` can be used to specify the tool paths.
 `ACCELDOKU_VIVADO_JOBS` specifies Vivado's internal parallelism independently of CMake's `--parallel` option.
 
+### PS clocks and boot firmware
+
+The specified operating rates assume a PS IOPLL output of approximately 1.5 GHz: the core clock is IOPLL / 13 and the DMA clock is IOPLL / 8.
+The Device Tree overlay requests these rates, but the actual rates depend on the clock configuration established by the boot firmware.
+With a 1 GHz IOPLL, the same requests can instead produce approximately 111.111 MHz and 166.667 MHz.
+
+After loading Acceldoku and its driver, check the actual clocks on the board:
+
+```sh
+grep -E ' iopll +| pl[01]_ref +' /sys/kernel/debug/clk/clk_summary
+dmesg | grep 'actual clocks'
+```
+
+One way to configure the required PS clocks is to install K26 Starter Kit BootFW 1.04, based on AMD's Yocto 2024.2 configuration.
+Its standard PS initialization sets IOPLL to approximately 1.5 GHz and configures the shared PS peripheral clock dividers.
+The following procedure was used on a KV260 revB running Ubuntu 24.04; it does not require rebuilding the Acceldoku bitstream.
+
+On the development machine, install the [Yocto host packages](https://docs.yoctoproject.org/brief-yoctoprojectqs/index.html#build-host-packages) and `repo`, then build the boot firmware:
+
+```sh
+mkdir kria-yocto
+cd kria-yocto
+repo init -u https://github.com/Xilinx/yocto-manifests.git -b rel-v2024.2 --depth=1
+repo sync -c -j4 --no-tags
+source ./setupsdk
+MACHINE=k26-smk bitbake xilinx-bootbin
+```
+
+The resulting `BOOT-k26-smk-*.bin` is placed in `build/tmp/deploy/images/k26-smk/`.
+See AMD's [BOOT.BIN generation guide](https://xilinx.github.io/kria-apps-docs/bootfw/build/html/docs/bootfw_boot.bin_generation.html) for details.
+
+Transfer the generated file to the board and run the following as root, replacing the path with the actual file location.
+Keep serial console and power-cycle access available during the update.
+
+```sh
+xmutil bootfw_status
+xmutil bootfw_update -i /path/to/BOOT-k26-smk.bin
+xmutil bootfw_status
+systemctl reboot
+```
+
+The updater writes the inactive A/B slot and requests a trial boot.
+After Linux starts, check `xmutil bootfw_status` and the IOPLL and peripheral clocks, then load Acceldoku and verify its actual clock rates and operation.
+Run the board tests as described in the [main README](../../README.md#tests).
+Once the new firmware is verified, mark the trial image bootable **before the next reboot**:
+
+```sh
+xmutil bootfw_update -v
+xmutil bootfw_status
+```
+
+If the trial image is not validated, the next restart falls back to the previously bootable image.
+If boot stops at the U-Boot prompt, `run bootcmd` continues the normal boot.
+For recovery and the full update procedure, see AMD's [Kria SOM Boot Firmware Update guide](https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/3020685316/Kria+SOM+Boot+Firmware+Update).
+
+On the tested board, BootFW 1.04 retained the 1.5 GHz IOPLL across a Linux software reboot; a cold boot after power-off was not tested.
+The first trial boot required `run bootcmd`, while the subsequent software reboot completed automatically.
+
 ### Build workflow
 
 The block design (BD) is synthesized as a whole rather than using out-of-context synthesis for each IP, so clock constraints also apply to the solver during synthesis.

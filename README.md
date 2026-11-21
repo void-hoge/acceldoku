@@ -27,6 +27,7 @@ Measurement conditions:
 - **FPGA:**
   - KV260, 6-core implementation
   - Core clock: 115.385 MHz; DMA clock: 187.5 MHz
+  - See [KV260 PS clock setup](fpga/kv260/README.md#ps-clocks-and-boot-firmware) for the required clock configuration
   - Median of three runs, each repeatedly submitting the corpus for 60 seconds with 8 input and 64 output buffers
   - Output contents were not read; only the number of results was counted
 - **CPU:**
@@ -188,4 +189,3 @@ These tests cover DMA ring operation, driver ownership and mapping lifetime, sto
 |----------------------------------------------------------------------------|--------:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`sim/data/17puz49158.txt`](sim/data/17puz49158.txt)                       |  49,158 | [dobrichev's collection](https://sites.google.com/site/dobrichev/sudoku-puzzle-collections) and [additional puzzles](http://forum.enjoysudoku.com/scan-solution-grids-for-17-clues-as-of-blue-t34012-90.html#p282968), based on Gordon Royle's 17-clue corpus. |
 | [`sim/data/HardestDatabase110626.txt`](sim/data/HardestDatabase110626.txt) |     375 | [HardestDatabase110626.txt](http://forum.enjoysudoku.com/the-hardest-sudokus-new-thread-t6539.html#p65791) from the Enjoy Sudoku forum.                                                                                                                        |
-
