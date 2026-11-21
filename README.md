@@ -1,17 +1,17 @@
-# Acceldoku: FPGA-Accelerated Deductive and Explorative Sudoku Solver
+# Acceldoku: FPGA による推論・探索型数独ソルバー
 
-## Overview
+## 概要
 
-Acceldoku is a high-throughput Sudoku solver accelerator that combines parallel application of deduction rules with depth-first search.
-Optimized for continuously processing large numbers of puzzles, it solves the 17-clue corpus at **27.623M solves/s** and the `HardestDatabase110626` corpus at **0.814M solves/s** on a KV260 (K26 SOM).
-These rates are respectively **5.24× and 3.65×** those of fastdoku running with 16 threads on a Ryzen 7 PRO 6850U.
+Acceldoku は、推論規則の並列適用と深さ優先探索を組み合わせた、高スループットの数独ソルバーアクセラレーターである。
+大量の問題を連続処理するよう最適化されており、KV260（K26 SOM）上で 17 ヒント問題集を **27.623M solves/s**、`HardestDatabase110626` を **0.814M solves/s** で解く。
+これは Ryzen 7 PRO 6850U 上で 16 スレッドを使用した fastdoku のそれぞれ **5.24 倍、3.65 倍**である。
 
-## Results
+## 結果
 
-The following results compare repeated submissions using `acceldoku_benchmark` on the KV260 with [fastdoku](https://github.com/rocketbombs/fastdoku/blob/main/README.md) on a Ryzen 7 PRO 6850U development machine.
-Rates are in **M solves/s (million puzzles per second)**.
+以下は、KV260 上の `acceldoku_benchmark` で問題集を繰り返し投入した結果と、Ryzen 7 PRO 6850U 開発機上の [fastdoku](https://github.com/rocketbombs/fastdoku/blob/main/README.md) の結果を比較したものである。
+単位は **M solves/s（毎秒百万問）**である。
 
-| Corpus                            |   Puzzles | KV260 FPGA | fastdoku, 1 thread | fastdoku, 16 threads |
+| 問題集                            |   問題数 | KV260 FPGA | fastdoku, 1 スレッド | fastdoku, 16 スレッド |
 |-----------------------------------|----------:|-----------:|-------------------:|---------------------:|
 | Kaggle 1 million Sudoku games     | 1,000,000 |     31.225 |              2.087 |               14.759 |
 | `puzzles1_unbiased`               | 1,000,000 |     30.128 |              0.754 |                5.504 |
@@ -22,55 +22,56 @@ Rates are in **M solves/s (million puzzles per second)**.
 | `puzzles6_forum_hardest_1106`     |       375 |      0.814 |             0.0319 |                0.223 |
 | `puzzles7_serg_benchmark`         |    10,000 |     17.193 |              0.814 |                5.881 |
 
-Measurement conditions:
+測定条件：
 
 - **FPGA:**
-  - KV260, 6-core implementation
-  - Core clock: 115.385 MHz; DMA clock: 187.5 MHz
-  - Median of three runs, each repeatedly submitting the corpus for 60 seconds with 8 input and 64 output buffers
-  - Output contents were not read; only the number of results was counted
+  - KV260、6 コア構成
+  - コアクロック：115.385 MHz、DMA クロック：187.5 MHz
+  - この周波数に必要な PS クロック設定については、[KV260 の手順](fpga/kv260/README.md#ps-クロックとブートファームウェア)を参照
+  - 入力バッファー 8 個、出力バッファー 64 個を使用し、問題集を 60 秒間繰り返し投入した 3 回の測定の中央値
+  - 出力内容は読み取らず、結果の件数のみを計数
 - **CPU:**
   - Ryzen 7 PRO 6850U
-  - fastdoku `auto`, built with native optimizations
-  - Median of three runs, each repeatedly finding the first solution for 60 seconds after a 1-second warm-up
-  - Threads were created before measurement; solutions were discarded and only the count was recorded
+  - fastdoku の `auto` をネイティブ最適化付きでビルド
+  - 1 秒間のウォームアップ後、最初の解を 60 秒間繰り返し求めた 3 回の測定の中央値
+  - スレッドは計測前に作成し、解は破棄して件数のみを記録
 
-## Architecture
+## アーキテクチャ
 
 
-| ![Acceldoku accelerator block diagram](images/block_diagram.svg) |
+| ![Acceldoku アクセラレーターのブロック図](images/block_diagram.svg) |
 |:----------------------------------------------------------------:|
-| Block diagram of the accelerator                                 |
+| アクセラレーターのブロック図                                     |
 
-| ![Solver core block diagram](images/core_block_diagram.svg) |
+| ![ソルバーコアのブロック図](images/core_block_diagram.svg) |
 |:-----------------------------------------------------------:|
-| Block diagram of an individual solver core                  |
+| 個々のソルバーコアのブロック図                              |
 
-Each core solves puzzles by updating a 729-bit candidate matrix register, with nine flag bits per cell.
-The deduction engine applies the Singles and Locked Candidates rules across the entire board in parallel on every cycle.
-Repeated application of these rules to the candidate matrix produces chains of deductions.
+各コアは、セルごとに 9 ビットのフラグを持つ 729 ビットの候補行列レジスターを更新して問題を解く。
+推論エンジンは毎サイクル、盤面全体に Singles と Locked Candidates の規則を並列に適用する。
+これらの規則を候補行列に繰り返し適用することで、連鎖的に推論を進める。
 
-New puzzles are supplied to the deduction engine through a BRAM-based deque used as a queue.
-When deduction stalls, the engine selects an unresolved cell and splits its candidate bits into two sets.
-It continues deduction on one set immediately and pushes the other onto the front of the deque.
+新しい問題は、キューとして使う BRAM ベースの両端キューを通じて推論エンジンに供給される。
+推論が停滞すると、未確定のセルを選択し、その候補を 2 組に分割する。
+一方の組で直ちに推論を続け、もう一方を両端キューの先頭に追加する。
 
-On a contradiction, it discards the current candidate matrix and takes another state from the front of the deque.
-When a solution is found, the remaining branches in the deque are discarded.
+矛盾が生じた場合は現在の候補行列を破棄し、両端キューの先頭から別の状態を取り出す。
+解が見つかった場合は、両端キューに残る分岐を破棄する。
 
-The same deque therefore serves as both a queue for incoming puzzles and a stack for backtracking.
+この両端キューは、入力問題のキューとバックトラック用のスタックを兼ねる。
 
-## Build & Usage
+## ビルドと使い方
 
-### Requirements
+### 必要環境
 
-- Development machine
-  - Synthesis and implementation:
-    - CMake 3.25 or later
+- 開発機
+  - 合成・配置配線：
+    - CMake 3.25 以降
     - Ninja
-    - Vivado 2026.1 or later, with K26 device support and `dtc`
-  - Verification:
+    - Vivado 2026.1 以降（K26 デバイスサポートと `dtc` を含む）
+  - 検証：
     - `build-essential`
-    - Rust / Cargo 1.83 or later
+    - Rust / Cargo 1.83 以降
     - Python 3
     - Icarus Verilog
     - Verilator
@@ -79,57 +80,57 @@ The same deque therefore serves as both a queue for incoming puzzles and a stack
 - KV260
   - Ubuntu 24.04
   - `build-essential`
-  - CMake 3.25 or later
+  - CMake 3.25 以降
   - Ninja
   - Python 3
-  - Rust / Cargo 1.83 or later
+  - Rust / Cargo 1.83 以降
   
-The versions of `rustc` and `cargo` available via `apt` may be outdated.
-To install latest versions, use `rustup` (which is available through `apt`).
+`apt` で提供される `rustc` と `cargo` は古い場合がある。
+最新版のインストールには `rustup` を使用する（`apt` でインストール可能）。
 
 ```sh
 apt install rustup
 rustup default stable
 ```
 
-### Generate FPGA firmware
+### FPGA ファームウェアの生成
 
-On the development machine, synthesize and implement the design, then generate the bitstream and Device Tree overlay.
-The output is placed in `build/kv260-pl/fpga/kv260/firmware/acceldoku/`.
+開発機で設計の合成・配置配線を行い、ビットストリームと Device Tree overlay を生成する。
+出力先は `build/kv260-pl/fpga/kv260/firmware/acceldoku/` である。
 
 ```sh
 cmake --preset kv260-pl
 cmake --build --preset kv260-pl
 ```
 
-The following options can be passed when configuring the preset:
+プリセットの設定時に以下のオプションを指定できる。
 
-- `-DACCELDOKU_CORES`: number of solver cores implemented in hardware (1–6; default: 6)
-- `-DACCELDOKU_VIVADO_JOBS`: number of cores used by Vivado
+- `-DACCELDOKU_CORES`：ハードウェアに実装するソルバーコア数（1〜6、既定値：6）
+- `-DACCELDOKU_VIVADO_JOBS`：Vivado が使用するコア数
 
-### Build and load on the KV260
+### KV260 でのビルドとロード
 
-Transfer the source and generated firmware directory to the KV260.
-Running `git clone --recursive https://github.com/void-hoge/acceldoku.git` also clones the submodule.
+ソースと生成したファームウェアディレクトリを KV260 に転送する。
+`git clone --recursive https://github.com/void-hoge/acceldoku.git` を実行すると、サブモジュールもクローンできる。
 
-Install the required packages on the board's Ubuntu system. Separately install Rust / Cargo 1.83 or later and add it to `PATH`.
+実機の Ubuntu に必要なパッケージをインストールする。Rust / Cargo 1.83 以降は別途インストールして `PATH` に追加する。
 
 ```sh
 sudo apt install build-essential cmake ninja-build python3 "linux-headers-$(uname -r)"
 ```
 
-Build the driver and tools:
+ドライバーとツールをビルドする。
 
 ```sh
 cmake --preset kv260-ps
 cmake --build --preset kv260-ps
 ```
 
-This generates `build/kv260-ps/host/driver/src/acceldoku.ko`, the C/C++ tools, and the C++ library.
-The module is built against the headers for the running kernel.
+`build/kv260-ps/host/driver/src/acceldoku.ko`、C/C++ ツール、C++ ライブラリが生成される。
+モジュールは実行中のカーネルのヘッダーを使用してビルドされる。
 
-In a root shell on the board, specify the path to the transferred firmware and load it.
-First close any programs and memory mappings currently using the device.
+実機の root シェルで、転送したファームウェアのパスを指定してロードする。
+先にデバイスを使用中のプログラムとメモリーマッピングをすべて閉じる。
 
 ```sh
 FIRMWARE_DIR=/path/to/copied/firmware/acceldoku
@@ -143,23 +144,23 @@ insmod build/kv260-ps/host/driver/src/acceldoku.ko
 ls -l /dev/acceldoku
 ```
 
-### Run and verify
+### 実行と検証
 
-Once `/dev/acceldoku` is available, run the benchmark. Input consists of one puzzle per line, with 81 cells per puzzle and `.` or `0` representing an empty cell.
+`/dev/acceldoku` が使用可能になったら、ベンチマークを実行する。入力は 1 行に 1 問、1 問につき 81 セルで、空きセルは `.` または `0` で表す。
 
 ```sh
-# Arguments: corpus, input buffers, output buffers, measurement time in seconds
+# 引数：問題集、入力バッファー数、出力バッファー数、測定時間（秒）
 build/kv260-ps/host/tools/cpp/acceldoku_benchmark sim/data/17puz49158.txt 8 64 10
-# Argument: corpus
+# 引数：問題集
 build/kv260-ps/host/tools/cpp/acceldoku_verify sim/data/17puz49158.txt
 ```
 
-The benchmark repeatedly submits the corpus for the specified duration and counts the output results.
-`acceldoku_verify` submits each puzzle once and compares output checksums against fastdoku.
+ベンチマークは指定時間中、問題集を繰り返し投入して出力結果を計数する。
+`acceldoku_verify` は各問題を一度ずつ投入し、出力のチェックサムを fastdoku と比較する。
 
-### Tests
+### テスト
 
-To run CPU reference and RTL tests on the development machine, initialize the submodule and run:
+開発機で CPU リファレンスと RTL のテストを実行するには、サブモジュールを初期化して次を実行する。
 
 ```sh
 cmake --preset dev
@@ -167,8 +168,8 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-On the KV260, build with the `kv260-ps` preset, make `/dev/acceldoku` available, and close any other programs using the device.
-Run the host tests from the repository root:
+KV260 では `kv260-ps` プリセットでビルドし、`/dev/acceldoku` を使用可能にして、デバイスを使用する他のプログラムを閉じる。
+リポジトリのルートからホストテストを実行する。
 
 ```sh
 cmake --preset kv260-ps
@@ -176,16 +177,15 @@ cmake --build --preset kv260-ps
 ctest --preset kv260-ps
 ```
 
-These tests cover DMA ring operation, driver ownership and mapping lifetime, stop notifications, the C++ API, and text input conversion. Device tests run serially. The text input test also runs in GitHub Actions alongside the CPU reference and RTL tests. See [host/README.md](host/README.md) and [sim/README.md](sim/README.md) for details.
+これらのテストは DMA リングの動作、ドライバーの所有権とマッピングの寿命、停止通知、C++ API、テキスト入力の変換を検証する。デバイスを使用するテストは直列に実行される。テキスト入力のテストは CPU リファレンスおよび RTL のテストとともに GitHub Actions でも実行される。詳細は [host/README.md](host/README.md) と [sim/README.md](sim/README.md) を参照する。
 
-## License
+## ライセンス
 
 - MIT
 
-### Corpora
+### 問題集
 
-| Corpus                                                                     | Puzzles | Original source and collection                                                                                                                                                                                                                                 |
+| 問題集                                                                     | 問題数 | 元の出典・収集元                                                                                                                                                                                                                                 |
 |----------------------------------------------------------------------------|--------:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`sim/data/17puz49158.txt`](sim/data/17puz49158.txt)                       |  49,158 | [dobrichev's collection](https://sites.google.com/site/dobrichev/sudoku-puzzle-collections) and [additional puzzles](http://forum.enjoysudoku.com/scan-solution-grids-for-17-clues-as-of-blue-t34012-90.html#p282968), based on Gordon Royle's 17-clue corpus. |
-| [`sim/data/HardestDatabase110626.txt`](sim/data/HardestDatabase110626.txt) |     375 | [HardestDatabase110626.txt](http://forum.enjoysudoku.com/the-hardest-sudokus-new-thread-t6539.html#p65791) from the Enjoy Sudoku forum.                                                                                                                        |
-
+| [`sim/data/17puz49158.txt`](sim/data/17puz49158.txt)                       |  49,158 | Gordon Royle の 17 ヒント問題集を基にした [dobrichev のコレクション](https://sites.google.com/site/dobrichev/sudoku-puzzle-collections)と[追加の問題](http://forum.enjoysudoku.com/scan-solution-grids-for-17-clues-as-of-blue-t34012-90.html#p282968)。 |
+| [`sim/data/HardestDatabase110626.txt`](sim/data/HardestDatabase110626.txt) |     375 | Enjoy Sudoku フォーラムの [HardestDatabase110626.txt](http://forum.enjoysudoku.com/the-hardest-sudokus-new-thread-t6539.html#p65791)。 |
