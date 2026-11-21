@@ -72,7 +72,7 @@ module tb_deduction_engine;
         $display("PASS: claiming column");
 
         // A locked elimination creates a singleton. Its effect on peers
-        // must not propagate until the next inference step.
+        // must not propagate until the next deduction step.
         candidates_in = {729{1'b1}};
         for (r = 1; r < 3; r = r + 1)
             for (c = 0; c < 3; c = c + 1)
@@ -135,7 +135,7 @@ module tb_deduction_engine;
              "004000800", "009000401", "000300000", "060702000"},
             {"538129674", "697435218", "241687395", "352816947", "876954123",
              "914273856", "729568431", "485391762", "163742589"}, 17);
-        $display("All inference tests passed.");
+        $display("All deduction tests passed.");
         $finish;
     end
 
@@ -171,8 +171,8 @@ module tb_deduction_engine;
                 #1;
             end
             if (!solved || contradiction || candidates_in !== reference_state || count != steps)
-                $fatal(1, "Known puzzle solution or inference count changed");
-            $display("PASS: known puzzle, %0d inference steps", count);
+                $fatal(1, "Known puzzle solution or deduction count changed");
+            $display("PASS: known puzzle, %0d deduction steps", count);
         end
     endtask
 endmodule

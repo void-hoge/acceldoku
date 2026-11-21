@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
-// Inference engine: every rule and validation read the same current state.
+// Deduction engine: every rule and validation read the same current state.
 // The core registers the successor and metadata; validation is NOT cascaded
-// after inference. Helpers below are local building blocks of this engine.
+// after deduction. Helpers below are local building blocks of this engine.
 module deduction_engine (
     input wire [728:0] candidates_in,
     output wire [728:0] candidates_out,
@@ -14,7 +14,7 @@ module deduction_engine (
     wire [242:0] unit_used, unit_unique;
     analysis analyze(candidates_in, fixed_digits, unit_used, unit_unique,
         solved, contradiction);
-    inference_rules rules(candidates_in, fixed_digits, unit_used, unit_unique,
+    deduction_rules rules(candidates_in, fixed_digits, unit_used, unit_unique,
         candidates_out, forced_conflict);
     genvar row;
     generate for (row = 0; row < 9; row = row + 1) begin : changes
@@ -63,7 +63,7 @@ module naked_single_preload (
 endmodule
 
 // Singles and locked candidates, consuming the shared analysis.
-module inference_rules (
+module deduction_rules (
     input wire [728:0] candidates_in,
     input wire [728:0] fixed_digits,
     input wire [242:0] unit_used,

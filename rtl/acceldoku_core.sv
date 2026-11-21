@@ -42,9 +42,9 @@ module acceldoku_core (
     wire last_changed = |last_row_changed;
     wire contradiction = state_contradiction || last_forced_conflict;
     wire solved = state_solved && !last_forced_conflict;
-    // Both combinational engines read current. No inference -> validation
+    // Both combinational engines read current. No deduction -> validation
     // path controls current's write enable or next-state mux in this cycle.
-    deduction_engine infer(current, next_candidates, state_solved, state_contradiction,
+    deduction_engine deduce(current, next_candidates, state_solved, state_contradiction,
         next_forced_conflict, next_row_changed);
     branch_generator branching(current, child_a, child_b);
 
