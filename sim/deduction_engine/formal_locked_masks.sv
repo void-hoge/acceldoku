@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 // Frozen pre-sharing specification: combine all eight locked-candidate
 // terms separately at every cell, independently of the DUT's segment masks.
-module reference_inference_rules (
+module reference_deduction_rules (
     input wire [728:0] candidates_in,
     input wire [728:0] fixed_digits,
     input wire [242:0] unit_used,
@@ -86,9 +86,9 @@ module formal_locked_masks (
 );
     wire [728:0] actual, expected;
     wire actual_conflict, expected_conflict, expected_changed;
-    inference_rules dut(candidates_in, fixed_digits, unit_used, unit_unique,
+    deduction_rules dut(candidates_in, fixed_digits, unit_used, unit_unique,
         actual, actual_conflict);
-    reference_inference_rules reference_rules(candidates_in, fixed_digits,
+    reference_deduction_rules reference_rules(candidates_in, fixed_digits,
         unit_used, unit_unique, expected, expected_changed, expected_conflict);
     assign mismatch = (actual != expected) || (actual_conflict != expected_conflict) ||
         ((actual != candidates_in) != expected_changed);
