@@ -1,46 +1,106 @@
-# KV260 board implementation
+# KV260 ボード実装
 
-## FPGA design
+## FPGA 設計
 
-- The design targets the K26 on the KV260 revB (`xck26-sfvc784-2LV-c`) and uses the official SOM 1.4 preset.
-- AXI DMA operates in Scatter-Gather mode. The memory and stream data widths are 128 bits, the maximum burst length is 64 beats, the address width is 40 bits, and the length field is 23 bits. Host packets are at most 1 MiB.
-- PS port HP0 is used for MM2S and Scatter-Gather descriptors, and HP1 for S2MM. DMA is non-coherent, so the Device Tree does not specify `dma-coherent`.
-- The DMA AXI-Lite address is `0xa0000000`, and the solver AXI-Lite address is `0xa0010000`.
-- The MM2S and S2MM interrupts connect to `pl_ps_irq0[0]` and `pl_ps_irq0[1]`, respectively. They correspond to GIC SPI 89 and 90 and are both active high.
-- For fan control, PS TTC0 wave[2] connects through EMIO to `fan_en_b` (A12). The pin is constrained to LVCMOS33, 4 mA drive, and SLOW slew rate.
+- KV260 revB の K26（`xck26-sfvc784-2LV-c`）を対象とし、公式 SOM 1.4 プリセットを使用する。
+- AXI DMA は Scatter-Gather モードで動作する。メモリーとストリームのデータ幅は 128 ビット、最大バースト長は 64 ビート、アドレス幅は 40 ビット、長さフィールドは 23 ビットである。ホストパケットは最大 1 MiB である。
+- PS ポート HP0 は MM2S と Scatter-Gather ディスクリプターに、HP1 は S2MM に使用する。DMA は非コヒーレントのため、Device Tree に `dma-coherent` は指定しない。
+- DMA の AXI-Lite アドレスは `0xa0000000`、ソルバーの AXI-Lite アドレスは `0xa0010000` である。
+- MM2S と S2MM の割り込みは、それぞれ `pl_ps_irq0[0]` と `pl_ps_irq0[1]` に接続する。GIC SPI 89 と 90 に対応し、どちらもアクティブ High である。
+- ファン制御のため、PS TTC0 wave[2] を EMIO 経由で `fan_en_b`（A12）に接続する。ピンは LVCMOS33、ドライブ強度 4 mA、スルーレート SLOW に制約する。
 
-## FPGA build
+## FPGA ビルド
 
-### Build configuration
+### ビルド設定
 
-Set up the Vivado environment before building so that the build can access the XilinxBoardStore bundled with Vivado.
+Vivado 同梱の XilinxBoardStore にアクセスできるよう、ビルド前に Vivado の環境を設定する。
 
-`ACCELDOKU_CORES` specifies the number of solver cores, from 1 to 6; the default is 6.
-The same implementation is used for a single core. The ABI always reserves counter space for six cores, and counters for unimplemented cores read as zero.
+`ACCELDOKU_CORES` はソルバーのコア数を 1〜6 で指定する。既定値は 6 である。
+単一コアの場合も同じ実装を使用する。ABI は常に 6 コア分のカウンター領域を確保し、未実装のコアのカウンターはゼロを返す。
 
-Clock settings are managed in `CMakeLists.txt` and applied to the PS configuration, timing constraints, and DTBO.
-The operating frequencies are 115,384,615 Hz for the cores and 187,500,000 Hz for DMA.
-The constrained periods are **8.666 ns** and **5.333 ns**, respectively, rounded down to the nearest 1 ps. They apply to both top-level synthesis and place and route. XPM CDC constraints are also evaluated using these periods.
+クロック設定は `CMakeLists.txt` で管理し、PS 設定、タイミング制約、DTBO に適用する。
+動作周波数はコアが 115,384,615 Hz、DMA が 187,500,000 Hz である。
+制約周期はそれぞれ 1 ps 単位で切り下げた **8.666 ns** と **5.333 ns** で、トップレベル合成と配置配線の両方に適用する。XPM CDC 制約もこの周期で評価する。
 
-`VIVADO_EXECUTABLE` and `DTC_EXECUTABLE` can be used to specify the tool paths.
-`ACCELDOKU_VIVADO_JOBS` specifies Vivado's internal parallelism independently of CMake's `--parallel` option.
+`VIVADO_EXECUTABLE` と `DTC_EXECUTABLE` でツールのパスを指定できる。
+`ACCELDOKU_VIVADO_JOBS` は、CMake の `--parallel` オプションとは独立して Vivado 内部の並列数を指定する。
 
-### Build workflow
+### PS クロックとブートファームウェア
 
-The block design (BD) is synthesized as a whole rather than using out-of-context synthesis for each IP, so clock constraints also apply to the solver during synthesis.
-After placement, physical optimization, and routing using the `Performance_ExplorePostRoutePhysOpt` strategy, the build runs `phys_opt_design -directive AggressiveExplore` before generating the bitstream.
+上記の動作周波数は、PS の IOPLL 出力が約 1.5 GHz であることを前提とする。
+コアクロックは IOPLL / 13、DMA クロックは IOPLL / 8 である。
+Device Tree overlay はこれらの周波数を要求するが、実際の周波数はブートファームウェアが設定するクロック構成に依存する。
+IOPLL が 1 GHz の場合、同じ要求に対してそれぞれ約 111.111 MHz、166.667 MHz になることがある。
 
-| Target | Operation |
+Acceldoku とドライバーをロードした後、実機で実際のクロックを確認できる。
+
+```sh
+grep -E ' iopll +| pl[01]_ref +' /sys/kernel/debug/clk/clk_summary
+dmesg | grep 'actual clocks'
+```
+
+必要な PS クロックを設定する方法の一つとして、AMD の Yocto 2024.2 構成に基づく K26 Starter Kit BootFW 1.04 をインストールできる。
+その標準 PS 初期化は IOPLL を約 1.5 GHz に設定し、共有する PS 周辺クロックの分周も設定する。
+以下の手順は Ubuntu 24.04 を使用する KV260 revB で実施したもので、Acceldoku のビットストリームの再生成は不要である。
+
+開発機に [Yocto の必要パッケージ](https://docs.yoctoproject.org/brief-yoctoprojectqs/index.html#build-host-packages)と `repo` をインストールし、次を実行する。
+
+```sh
+mkdir kria-yocto
+cd kria-yocto
+repo init -u https://github.com/Xilinx/yocto-manifests.git -b rel-v2024.2 --depth=1
+repo sync -c -j4 --no-tags
+source ./setupsdk
+MACHINE=k26-smk bitbake xilinx-bootbin
+```
+
+生成された `BOOT-k26-smk-*.bin` は `build/tmp/deploy/images/k26-smk/` に置かれる。
+ビルドフローの詳細は AMD の [BOOT.BIN 生成ガイド](https://xilinx.github.io/kria-apps-docs/bootfw/build/html/docs/bootfw_boot.bin_generation.html)を参照する。
+
+生成ファイルを実機に転送し、実際のパスを指定して root で次を実行する。
+更新時はシリアルコンソールと電源操作を利用できるようにしておく。
+
+```sh
+xmutil bootfw_status
+xmutil bootfw_update -i /path/to/BOOT-k26-smk.bin
+xmutil bootfw_status
+systemctl reboot
+```
+
+更新ツールは未使用側の A/B スロットに書き込み、次回の試験起動対象に設定する。
+Linux 起動後、`xmutil bootfw_status`、IOPLL と周辺クロックを確認し、Acceldoku をロードして実際の周波数と動作を確認する。
+[トップの README](../../README.md#テスト) に従って実機テストも実行する。
+新しいファームウェアを確認できたら、**次の再起動前に**試験イメージを起動可能として確定する。
+
+```sh
+xmutil bootfw_update -v
+xmutil bootfw_status
+```
+
+試験イメージを確定しない場合、次の再起動では以前の起動可能なイメージに戻る。
+起動が U-Boot プロンプトで止まった場合は、`run bootcmd` で通常の起動を継続できる。
+復旧方法と更新手順の詳細は、AMD の [Kria SOM Boot Firmware Update ガイド](https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/3020685316/Kria+SOM+Boot+Firmware+Update)を参照する。
+
+検証した実機では、BootFW 1.04 で Linux からのソフトウェア再起動後も IOPLL が 1.5 GHz に維持されることを確認した。
+電源を切ってからのコールドブートは未確認である。
+初回の試験起動では `run bootcmd` が必要だったが、その後のソフトウェア再起動は自動で完了した。
+
+### ビルドの流れ
+
+ブロックデザイン（BD）は IP ごとの out-of-context 合成ではなく全体をまとめて合成し、合成時にもソルバーにクロック制約を適用する。
+`Performance_ExplorePostRoutePhysOpt` ストラテジーによる配置・物理最適化・配線後、`phys_opt_design -directive AggressiveExplore` を実行してからビットストリームを生成する。
+
+| ターゲット | 操作 |
 |--------|-----------|
-| `kv260-bd` | Generate and validate the BD only (`bd/`) |
-| `kv260-synth` | Synthesize the design (`synth/`) |
-| `kv260-bitstream` | Place and route, generate the bitstream, and check the output (`implementation/`) |
-| `kv260-package` | Generate the bitstream if needed and package it with the DTBO as firmware |
+| `kv260-bd` | BD の生成と検証のみを実行（`bd/`） |
+| `kv260-synth` | 設計を合成（`synth/`） |
+| `kv260-bitstream` | 配置配線、ビットストリーム生成、出力の検査（`implementation/`） |
+| `kv260-package` | 必要に応じてビットストリームを生成し、DTBO とともにファームウェアとしてパッケージ化 |
 
-Each stage uses a separate Vivado project and is regenerated when sources, constraints, or the core count change.
-The output checks cover setup, hold, pulse width, CDC, bus skew, and the fan pin. They create `build_complete` on success; firmware packaging requires this file.
+各ステージは別々の Vivado プロジェクトを使用し、ソース、制約、コア数が変わると再生成される。
+出力検査はセットアップ、ホールド、パルス幅、CDC、バススキュー、ファンのピンを対象とする。成功時に `build_complete` を作成し、ファームウェアのパッケージ化にはこのファイルが必要である。
 
-### Artifacts
+### 生成物
 
 ```text
 build/kv260-pl/fpga/kv260/
@@ -49,28 +109,28 @@ build/kv260-pl/fpga/kv260/
     acceldoku.dtbo
     shell.json
   implementation/
-    timing_summary.rpt    Setup, hold, pulse width, and unconstrained paths
-    utilization.rpt       LUT, FF, CLB, BRAM, and URAM utilization
-    cdc.rpt               CDC report
-    bus_skew.rpt          Held-bus and FIFO pointer skew
-    io.rpt, drc.rpt       I/O and DRC reports
-    verified_routed.dcp   Checked checkpoint
-    acceldoku.xsa         Hardware definition
-    project/              Vivado project and detailed runme.log
+    timing_summary.rpt    セットアップ、ホールド、パルス幅、未制約パス
+    utilization.rpt       LUT、FF、CLB、BRAM、URAM の使用量
+    cdc.rpt               CDC レポート
+    bus_skew.rpt          保持バスと FIFO ポインターのスキュー
+    io.rpt, drc.rpt       I/O および DRC レポート
+    verified_routed.dcp   検査済みチェックポイント
+    acceldoku.xsa         ハードウェア定義
+    project/              Vivado プロジェクトと詳細な runme.log
 ```
 
-## Control registers
+## 制御レジスター
 
-| Offset | Description |
+| オフセット | 説明 |
 |--------|-------------|
-| 0x000 | Bit 0: reset (initial value 1); bit 1: enable |
-| 0x004 | Output slot capacity N; configurable only during reset |
-| 0x008 | Add to the registered submission count, including pending sends, before starting TX. Reads return the lower 32 bits of the cumulative count. |
-| 0x00c | Bit 0: sticky framing error; bit 1: snapshot pending |
-| 0x010 | Write 1 to bit 0 to request a counter snapshot |
-| 0x014 | Identity `0x46414405` (statistics register layout v9) |
-| 0x018 | Upper 32 bits of the cumulative registered submission count |
-| 0x100–0x2df | 60 64-bit counters, lower 32 bits first |
+| 0x000 | ビット 0：リセット（初期値 1）、ビット 1：有効化 |
+| 0x004 | 出力スロット容量 N。リセット中のみ設定可能 |
+| 0x008 | TX 開始前に送信待ちを含む登録投入件数を加算。読み出すと累積件数の下位 32 ビットを返す |
+| 0x00c | ビット 0：保持されるフレーミングエラー、ビット 1：スナップショット処理中 |
+| 0x010 | ビット 0 に 1 を書き込むとカウンターのスナップショットを要求 |
+| 0x014 | 識別値 `0x46414405`（統計レジスター配置 v9） |
+| 0x018 | 累積登録投入件数の上位 32 ビット |
+| 0x100–0x2df | 64 ビットカウンター 60 個。下位 32 ビットが先 |
 
-See the comments in `host/driver/include/acceldoku_ioctl.h` for the counter order.
-Counters in different clock domains are held and sampled using handshakes; counts are compared after all results have been drained.
+カウンターの順序は `host/driver/include/acceldoku_ioctl.h` のコメントを参照する。
+異なるクロックドメインのカウンターはハンドシェイクにより保持・サンプリングし、すべての結果が排出された後に件数を比較する。
